@@ -11,7 +11,7 @@
 html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 a{color:var(--acc)}
 code{font:13px/1.4 ui-monospace,Menlo,monospace;background:#262b36;padding:1px 4px;border-radius:4px}
-pre{background:#11141a;border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0}
+pre{max-width:100%;white-space:pre;background:#11141a;border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0}
 pre code{background:none;padding:0;font-size:12.5px}
 .bar{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--bd);padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));display:flex;gap:6px;align-items:center}
 .btn{background:var(--card2);color:var(--txt);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font-size:15px;min-height:42px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
@@ -38,6 +38,9 @@ h1{font-size:22px;margin:6px 0 4px}
 .call{color:#cfe3ff;font-size:14.5px;margin-top:6px;border-left:3px solid var(--acc);padding-left:8px}
 .call b{color:var(--acc);font-weight:600}
 .det{padding:0 12px 12px;border-top:1px dashed var(--bd)}
+.det{overflow-wrap:anywhere}
+.det pre code{overflow-wrap:normal}
+main{overflow-x:hidden}
 .det ul{margin:10px 0 4px;padding-left:18px}
 .det li{margin:4px 0}
 .more{color:var(--mut);font-size:12px;margin-top:6px}
@@ -181,7 +184,7 @@ let hotOnly=localStorage.getItem('hot')==='1',query='';
 const tagH=t=>(t.tags.includes('must')?'<span class="tag must">🔥 MUST</span>':'')+(t.tags.includes('weak')?'<span class="tag weak">⚠️ слабое</span>':'');
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const vis=t=>!hotOnly||t.tags.includes('must');
-function topicHTML(t,open,lbl){return `<details class="topic"${open?' open':''}><summary><div class="tt">${t.t} ${tagH(t)}</div>${lbl?`<div class="sec-lbl">${lbl}</div>`:''}<div class="call"><b>Для созвона:</b> ${esc(t.call)}</div>${t.b.length?'<div class="more">▸ подробнее</div>':''}</summary>${t.b.length?`<div class="det"><ul>${t.b.map(x=>x.startsWith('<pre>')?x:`<li>${x}</li>`).join('')}</ul></div>`:''}</details>`}
+function topicHTML(t,open,lbl){return `<details class="topic"${open?' open':''}><summary><div class="tt">${t.t} ${tagH(t)}</div>${lbl?`<div class="sec-lbl">${lbl}</div>`:''}<div class="call"><b>Для созвона:</b> ${esc(t.call)}</div>${t.b.length?'<div class="more">▸ подробнее</div>':''}</summary>${t.b.length?`<div class="det"><ul>${t.b.map(x=>x.startsWith('<pre>')?`<li style="list-style:none;margin-left:-18px">${x}</li>`:`<li>${x}</li>`).join('')}</ul></div>`:''}</details>`}
 function hotBtn(){return `<button class="btn${hotOnly?' on':''}" onclick="toggleHot()">🔥</button>`}
 function toggleHot(){hotOnly=!hotOnly;localStorage.setItem('hot',hotOnly?'1':'0');render()}
 function home(){
