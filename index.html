@@ -622,6 +622,506 @@ final class Counter: Sendable {
 }`}]}
 ]});
 
+put({id:"uikit",t:"UIKit",topics:[
+{t:"Жизненный цикл UIViewController",call:"`loadView` → `viewDidLoad` (один раз) → `viewWillAppear` → `viewIsAppearing` (iOS 13+, размеры и trait уже известны) → `viewWillLayoutSubviews`/`viewDidLayoutSubviews` (много раз) → `viewDidAppear`. Уход: `viewWillDisappear` → `viewDidDisappear`. `deinit` — когда VC больше никто не держит.",
+d:["`loadView` переопределяют, только чтобы задать свой корневой view (`view = MyView()`), без `super`.","`view` загружается лениво: обращение к `vc.view` до показа вызовет `loadView` + `viewDidLoad` сразу.","`viewWillAppear`/`viewDidAppear` вызываются при каждом показе (возврат по back, закрытие модалки `.fullScreen`).","Модалка `.pageSheet`/`.formSheet` (по умолчанию с iOS 13): нижний VC остаётся на экране → его `viewWillDisappear`/`viewWillAppear` НЕ вызываются.","Layout-методы — для расчётов, зависящих от размеров; там не создавать view и не добавлять констрейнты (вызываются многократно)."],
+ex:[{n:"Push A → B и назад",c:R`
+// push B:
+// B.viewDidLoad
+// A.viewWillDisappear
+// B.viewWillAppear
+// B.viewIsAppearing
+// A.viewDidDisappear
+// B.viewDidAppear
+//
+// pop B:
+// B.viewWillDisappear
+// A.viewWillAppear
+// A.viewIsAppearing
+// B.viewDidDisappear
+// A.viewDidAppear
+// B.deinit   (если нет утечки)`}]},
+{t:"viewDidLoad vs viewWillAppear: что куда",call:"`viewDidLoad` — однократная настройка: иерархия, констрейнты, подписки, первый запрос. `viewWillAppear`/`viewIsAppearing` — то, что обновляется при каждом показе (данные, навбар, выделение ячейки). Геометрия — не в `viewDidLoad`.",
+d:["Ошибка: читать `view.bounds` в `viewDidLoad` — размер ещё из xib/дефолта, не финальный.","Ошибка: подписываться на Notification в `viewWillAppear` без отписки → множественные подписки.","Ошибка: стартовать запрос в `viewWillAppear` без защиты → повтор при каждом возврате.","Таймеры/анимации запускать в `viewDidAppear`, останавливать в `viewDidDisappear`."],
+ex:[{n:"",c:R`
+final class FeedVC: UIViewController {
+    private let table = UITableView()
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.addSubview(table)
+        table.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            table.topAnchor.constraint(equalTo: view.topAnchor),
+            table.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        load()
+    }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if let ip = table.indexPathForSelectedRow { table.deselectRow(at: ip, animated: true) }
+    }
+    private func load() {}
+}`}]},
+{t:"Навигация и контейнеры",call:"`UINavigationController` хранит стек `viewControllers` и держит их сильно; push/pop меняют стек. Свой контейнер: `addChild` → `addSubview` → `didMove(toParent:)`, удаление — в обратном порядке.",
+d:["`setViewControllers(_:animated:)` — заменить весь стек (например, после логина).","Модальный показ: presenting VC держит presented; `dismiss` вызывается на любом из них.","Без `addChild` дочерний VC не получает appearance-колбэки и trait changes.","Координатор — выносит переходы из VC; VC сообщает о событии через замыкание/делегат."],
+ex:[{n:"Child VC",c:R`
+func embed(_ child: UIViewController, in container: UIView) {
+    addChild(child)
+    child.view.frame = container.bounds
+    child.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    container.addSubview(child.view)
+    child.didMove(toParent: self)
+}
+func remove(_ child: UIViewController) {
+    child.willMove(toParent: nil)
+    child.view.removeFromSuperview()
+    child.removeFromParent()
+}`}]},
+{t:"Hit-testing и responder chain",call:"Касание ищется сверху вниз: `hitTest(_:with:)` от окна рекурсивно, в обратном порядке subviews (верхний первым). View пропускается, если скрыт, `alpha < 0.01`, `isUserInteractionEnabled == false` или точка вне `point(inside:)`. Событие, не обработанное view, идёт вверх по responder chain: view → superview → VC → … → window → application.",
+d:["Subview за пределами bounds родителя не получает касания (даже если видна при `clipsToBounds = false`) — родитель отсекает по `point(inside:)`.","Увеличить зону нажатия: переопределить `point(inside:)` с `bounds.insetBy(dx: -20, dy: -20)`.","Пропускающий view (оверлей): вернуть nil, если hitTest попал в сам view.","Жесты распознаются параллельно: gesture recognizer получает touches раньше view и может отменить их (`cancelsTouchesInView`)."],
+ex:[{n:"Как устроен hitTest",c:R`
+extension UIView {
+    func myHitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard isUserInteractionEnabled, !isHidden, alpha >= 0.01,
+              self.point(inside: point, with: event) else { return nil }
+        for sub in subviews.reversed() {
+            let p = sub.convert(point, from: self)
+            if let hit = sub.myHitTest(p, with: event) { return hit }
+        }
+        return self
+    }
+}`},
+{n:"Зона нажатия +20pt и сквозной оверлей",c:R`
+final class BigTapButton: UIButton {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -20, dy: -20).contains(point)
+    }
+}
+
+final class PassThroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit   // касания по пустому месту уходят ниже
+    }
+}`}]},
+{t:"Клавиатура: скрыть и подвинуть",call:"Скрыть: `view.endEditing(true)` или `UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)` — `to: nil` отправляет first responder'у. Для скролла: `keyboardDismissMode = .interactive`. Подвинуть контент: `view.keyboardLayoutGuide` (iOS 15+).",
+d:["`sendAction` с `to: nil` идёт по responder chain от first responder, возвращает `Bool` — нашёлся ли обработчик.","`endEditing(true)` ищет first responder только внутри этого view.","Старый способ: `keyboardWillShowNotification` + `keyboardFrameEndUserInfoKey` → `contentInset.bottom`.","Тап по фону: `UITapGestureRecognizer` с `cancelsTouchesInView = false`, иначе сломает тапы по ячейкам."],
+ex:[{n:"",c:R`
+// 1. Глобально
+UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                to: nil, from: nil, for: nil)
+
+// 2. Тап по фону
+let tap = UITapGestureRecognizer(target: view, action: #selector(UIView.endEditing(_:)))
+tap.cancelsTouchesInView = false
+view.addGestureRecognizer(tap)
+
+// 3. Скролл
+tableView.keyboardDismissMode = .interactive
+
+// 4. Поле над клавиатурой
+textField.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -8).isActive = true`}]},
+{t:"Auto Layout: intrinsicContentSize, hugging, compression",call:"`intrinsicContentSize` — естественный размер view (у UILabel по тексту). Hugging — сопротивление растяжению, compression resistance — сжатию; при конфликте побеждает больший приоритет (дефолты: hugging 250, compression 750).",
+d:["Свой view с естественным размером: переопределить `intrinsicContentSize` и звать `invalidateIntrinsicContentSize()` при изменении данных.","Два лейбла в ряд: тот, что должен сжиматься (обрезаться), получает меньший compression resistance.","`UIView.noIntrinsicMetric` — для измерения, которого нет.","Ambiguous layout ищется через `hasAmbiguousLayout`, `exerciseAmbiguityInLayout()`, View Debugger; конфликты — в логе `Unable to simultaneously satisfy constraints`."],
+ex:[{n:"TagView",c:R`
+final class TagView: UIView {
+    var text = "" { didSet { invalidateIntrinsicContentSize(); setNeedsDisplay() } }
+    private let font = UIFont.systemFont(ofSize: 14)
+
+    override var intrinsicContentSize: CGSize {
+        let s = (text as NSString).size(withAttributes: [.font: font])
+        return CGSize(width: ceil(s.width) + 16, height: ceil(s.height) + 8)
+    }
+}`},
+{n:"Кто сожмётся",c:R`
+// [name ............][date]
+name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)   // 250 → обрежется
+date.setContentCompressionResistancePriority(.required, for: .horizontal)     // 1000 → целиком
+date.setContentHuggingPriority(.required, for: .horizontal)                   // не растянется`}]},
+{t:"Frames vs Auto Layout, цикл layout",call:"`frame` — в координатах superview, `bounds` — свои (origin = смещение контента, у scroll view это contentOffset). Auto Layout считает frame из констрейнтов. Цикл: констрейнты (`updateConstraints`) → layout (`layoutSubviews`) → отрисовка (`draw`).",
+d:["`setNeedsLayout` — пометить, layout в следующем цикле RunLoop; `layoutIfNeeded` — выполнить сейчас (так анимируют констрейнты).","`setNeedsDisplay` → `draw(_:)` в следующем цикле; переопределять `draw` дорого (backing store).","При трансформации `frame` не определён — использовать `bounds` и `center`.","Ручные frames в `layoutSubviews` быстрее Auto Layout для сложных ячеек."],
+ex:[{n:"Анимация констрейнта",c:R`
+heightConstraint.constant = 200
+UIView.animate(withDuration: 0.3) {
+    self.view.layoutIfNeeded()     // анимируется пересчёт frame
+}`},
+{n:"bounds у scroll view",c:R`
+scrollView.contentOffset = CGPoint(x: 0, y: 100)
+print(scrollView.bounds.origin)   // (0.0, 100.0)
+print(scrollView.frame.origin)    // не изменился`}]}
+]});
+
+put({id:"render",t:"Рендеринг и производительность",topics:[
+{t:"Как кадр попадает на экран",call:"Main thread: layout → display (draw) → prepare (декодирование картинок) → commit дерева слоёв в render server. Render server и GPU рисуют кадр. На 60 Гц бюджет 16,7 мс, на 120 Гц (ProMotion) — 8,3 мс. Hitch = кадр не успел.",
+d:["Commit происходит в конце итерации RunLoop (`CATransaction`), поэтому изменения в одном цикле объединяются.","Commit hitch — долгий main thread (layout, тяжёлый draw, декодирование). Render hitch — тяжёлая работа render server (offscreen, blending, огромные слои).","Декодирование JPEG/PNG происходит лениво при первом показе на main — отсюда фризы в списках.","Инструменты: Instruments → Animation Hitches, Time Profiler; Xcode → Debug → View Debugging."],
+ex:[{n:"",c:R`
+// Изменения в одном цикле RunLoop → один commit
+view.backgroundColor = .red
+view.frame.origin.x += 10
+view.alpha = 0.5
+// render server получит одно обновление`}]},
+{t:"CALayer: неявные анимации и model/presentation",call:"Изменение анимируемого свойства отдельного CALayer анимируется неявно (0,25 с). У слоя, принадлежащего UIView, неявные анимации отключены (view возвращает NSNull в `action(for:forKey:)`) — кроме блока `UIView.animate`. Анимация меняет только presentation layer, model value нужно выставлять самому.",
+d:["Model layer — что вы задали; presentation layer (`layer.presentation()`) — что сейчас на экране.","Ловушка: `CABasicAnimation` без изменения model value — по окончании слой «прыгает» назад.","`fillMode = .forwards` + `isRemovedOnCompletion = false` — костыль: model остаётся старым, hit-testing и следующий расчёт врут.","Правильно: выставить новое значение модели без неявной анимации, затем добавить явную анимацию с fromValue."],
+ex:[{n:"Неявная анимация",c:R`
+let layer = CALayer()
+view.layer.addSublayer(layer)
+layer.opacity = 0.2           // отдельный слой — анимируется 0.25 с
+
+CATransaction.begin()
+CATransaction.setDisableActions(true)
+layer.opacity = 1             // без анимации
+CATransaction.commit()
+
+view.layer.opacity = 0.2      // backing layer UIView — без анимации`},
+{n:"Правильная явная анимация",c:R`
+let anim = CABasicAnimation(keyPath: "position.y")
+anim.fromValue = layer.position.y
+anim.toValue = 300
+anim.duration = 0.4
+
+CATransaction.begin()
+CATransaction.setDisableActions(true)
+layer.position.y = 300        // 1. меняем модель
+CATransaction.commit()
+layer.add(anim, forKey: "move")   // 2. анимируем визуально
+// после окончания слой остаётся на 300 и не прыгает`}]},
+{t:"Offscreen rendering и blending",call:"Offscreen — render server рисует слой в отдельный буфер, а потом композитит: тень без `shadowPath`, маски, `cornerRadius` + `masksToBounds` с содержимым subviews, `shouldRasterize`, групповая прозрачность. Blending — смешивание полупрозрачных слоёв, дорого на больших площадях.",
+d:["Тень: задать `shadowPath` — иначе система вычисляет форму по альфа-каналу содержимого.","`cornerRadius` + `masksToBounds` на простом слое без сабвью/контента часто не вызывает offscreen; `layer.cornerCurve = .continuous` для «iOS-углов».","`shouldRasterize` полезен только для статичного сложного слоя; при изменении — повторная растеризация каждый кадр. Нужно `rasterizationScale = UIScreen.main.scale` (или трейт `displayScale`).","Проверка в Simulator: Debug → Color Off-screen Rendered (жёлтым), Color Blended Layers (красным)."],
+ex:[{n:"Тень без offscreen",c:R`
+card.layer.shadowColor = UIColor.black.cgColor
+card.layer.shadowOpacity = 0.2
+card.layer.shadowRadius = 8
+card.layer.shadowOffset = CGSize(width: 0, height: 2)
+
+override func layoutSubviews() {
+    super.layoutSubviews()
+    card.layer.shadowPath = UIBezierPath(roundedRect: card.bounds, cornerRadius: 12).cgPath
+}`},
+{n:"Меньше blending",c:R`
+label.backgroundColor = .systemBackground   // непрозрачный фон вместо .clear
+label.isOpaque = true
+imageView.image = opaqueJPEG                // без альфа-канала`}]},
+{t:"Плавные списки: reuse, prefetching, downsampling",call:"Ячейки переиспользуются (`dequeueReusableCell`) — сбрасывать состояние в `prepareForReuse` и отменять загрузку. Prefetching (`UITableViewDataSourcePrefetching`) стартует загрузку заранее. Картинки декодировать и уменьшать до размера ячейки в фоне (ImageIO thumbnail или `preparingThumbnail(of:)`).",
+d:["Классический баг: асинхронная картинка приходит в уже переиспользованную ячейку → проверять, что ячейка всё ещё для этого id/URL.","Декодированная картинка 4000×3000 = 48 МБ памяти (×4 байта/пиксель) — независимо от размера файла.","`UIImage.preparingForDisplay()` / `byPreparingThumbnail(ofSize:)` (iOS 15) — декодирование вне main.","Высоты ячеек: self-sizing с корректными констрейнтами или кеш высот; `estimatedRowHeight` близкий к реальному.","Diffable data source — анимации без ручного `performBatchUpdates` и без крашей рассинхрона."],
+ex:[{n:"Reuse-безопасная загрузка",c:R`
+final class PhotoCell: UITableViewCell {
+    private var task: Task<Void, Never>?
+    private var url: URL?
+
+    func configure(url: URL, loader: ImageLoader) {
+        self.url = url
+        task = Task { [weak self] in
+            guard let data = try? await loader.data(for: url),
+                  let img = await UIImage(data: data)?.byPreparingThumbnail(ofSize: CGSize(width: 160, height: 160))
+            else { return }
+            guard let self, self.url == url else { return }   // ячейку уже переиспользовали?
+            self.imageView?.image = img
+        }
+    }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        task?.cancel(); task = nil
+        imageView?.image = nil
+    }
+}`},
+{n:"Downsampling через ImageIO",c:R`
+import ImageIO
+
+func downsample(_ data: Data, maxPixel: CGFloat) -> CGImage? {
+    let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)!
+    let opts = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceShouldCacheImmediately: true,      // декодировать сейчас (в фоне)
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixel,   // pt × scale
+    ] as CFDictionary
+    return CGImageSourceCreateThumbnailAtIndex(src, 0, opts)
+}`},
+{n:"Prefetching",c:R`
+extension FeedVC: UITableViewDataSourcePrefetching {
+    func tableView(_ tv: UITableView, prefetchRowsAt indexPaths: [IndexPath]) {
+        indexPaths.forEach { loader.prefetch(items[$0.row].url) }
+    }
+    func tableView(_ tv: UITableView, cancelPrefetchingForRowsAt indexPaths: [IndexPath]) {
+        indexPaths.forEach { loader.cancel(items[$0.row].url) }
+    }
+}`}]},
+{t:"Instruments и поиск проблем",call:"Time Profiler — где тратится CPU (Invert Call Tree, Hide System Libraries). Animation Hitches — пропущенные кадры. Allocations/Leaks и Memory Graph — память и циклы. Network — запросы. Профилировать на устройстве и Release-сборке.",
+d:["Hang — main thread занят > 250 мс; Xcode Organizer показывает hangs с устройств пользователей.","`os_signpost` / `OSSignposter` — свои интервалы в Instruments.","Memory Graph: фиолетовый «!» — утечка; смотреть, кто держит объект.","MetricKit — метрики (запуск, hangs, крэши) из продакшена."],
+ex:[{n:"Signpost",c:R`
+import os
+let signposter = OSSignposter(subsystem: "app", category: "feed")
+
+func loadFeed() async {
+    let state = signposter.beginInterval("loadFeed")
+    defer { signposter.endInterval("loadFeed", state) }
+    // работа
+}`}]}
+]});
+
+put({id:"swiftui",t:"SwiftUI",topics:[
+{t:"Identity и пересчёт body",call:"View — описание, struct; `body` пересчитывается при изменении зависимостей. Состояние (`@State`) привязано к identity view: структурной (позиция в иерархии) или явной (`id`, `ForEach` по `Identifiable`). Сменилась identity — состояние сбрасывается, анимации — как удаление/вставка.",
+d:["`if/else` в body — две разные ветки = две разные identity; модификатор с условием (`opacity(flag ? 1 : 0)`) сохраняет identity.","`ForEach(items, id: \\.self)` с дубликатами или `id: \\.offset` — баги со состоянием строк при вставке/удалении.","`.id(value)` — принудительно пересоздать view (сбросить состояние/скролл).","Минимизировать пересчёт: выносить части в отдельные View, передавать только нужные данные; `Self._printChanges()` в body для отладки."],
+ex:[{n:"Сохранение и потеря состояния",c:R`
+struct Demo: View {
+    @State private var on = false
+    var body: some View {
+        VStack {
+            Toggle("on", isOn: $on)
+            if on { Counter() } else { Counter() }   // разные identity → счётчик сбросится
+            Counter().opacity(on ? 1 : 0.5)          // одна identity → счётчик сохранится
+        }
+    }
+}
+struct Counter: View {
+    @State private var n = 0
+    var body: some View { Button("\(n)") { n += 1 } }
+}`}]},
+{t:"Состояние: @State, @Binding, @Observable",call:"`@State` — локальное состояние, которым view владеет. `@Binding` — ссылка на чужое состояние. `@Observable` (iOS 17) — модель-класс, view подписывается только на реально прочитанные свойства. Владеет моделью `@State`, передаётся просто как `let`/`@Bindable`.",
+d:["До iOS 17: `ObservableObject` + `@Published`; `@StateObject` — владеет (создаётся один раз), `@ObservedObject` — не владеет (пересоздастся с родителем — частый баг).","`@Observable` точечнее: изменение свойства, которое body не читает, не вызывает пересчёт.","`@Bindable var model` — чтобы получить `$model.text` для TextField.","`@Environment(Model.self)` — передача через окружение.","`@State` инициализируется один раз; передача значения в init дочернего `@State` не обновит его позже."],
+ex:[{n:"@Observable + .task",c:R`
+import Observation
+
+@Observable @MainActor
+final class FeedModel {
+    var items: [String] = []
+    var isLoading = false
+    func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        try? await Task.sleep(for: .milliseconds(300))
+        items = ["a", "b", "c"]
+    }
+}
+
+struct FeedView: View {
+    @State private var model = FeedModel()
+    var body: some View {
+        List(model.items, id: \.self) { Text($0) }
+            .overlay { if model.isLoading { ProgressView() } }
+            .task { await model.load() }    // отменится при исчезновении
+    }
+}`},
+{n:"@Binding",c:R`
+struct Parent: View {
+    @State private var name = ""
+    var body: some View { NameField(name: $name) }
+}
+struct NameField: View {
+    @Binding var name: String
+    var body: some View { TextField("Имя", text: $name) }
+}`}]},
+{t:".task vs onAppear",call:"`.task` запускает async-работу при появлении и автоматически отменяет при исчезновении; `.task(id:)` перезапускает при смене id. `onAppear` синхронный, может вызываться несколько раз, отмены нет.",
+d:["Внутри `onAppear` с `Task {}` — задачу надо отменять вручную, иначе она переживёт view.","`onAppear` в `List`/`LazyVStack` вызывается при каждом появлении строки при скролле.","`.task(id: query)` — удобный поиск с debounce: при новом query старая задача отменяется."],
+ex:[{n:"Поиск с debounce",c:R`
+struct SearchView: View {
+    @State private var query = ""
+    @State private var results: [String] = []
+    var body: some View {
+        List(results, id: \.self) { Text($0) }
+            .searchable(text: $query)
+            .task(id: query) {
+                try? await Task.sleep(for: .milliseconds(300))   // отменится при новом вводе
+                guard !Task.isCancelled else { return }
+                results = await search(query)
+            }
+    }
+    func search(_ q: String) async -> [String] { q.isEmpty ? [] : [q, q + q] }
+}`}]},
+{t:"List vs LazyVStack",call:"`List` — на базе UICollectionView: переиспользование ячеек, swipe actions, разделители, выделение. `LazyVStack` в `ScrollView` — создаёт view лениво, но не переиспользует; созданные view остаются в памяти. Для больших списков — List или стабильные id.",
+d:["Стабильные id (`Identifiable` с id из модели) — ключ к корректным анимациям и производительности.","`VStack` (не lazy) в ScrollView создаёт все строки сразу.","Программный скролл — `ScrollViewReader` / `scrollPosition(id:)` (iOS 17).","Тяжёлые строки: `equatable()`-подобная оптимизация — разбить на мелкие View с простыми входами."],
+ex:[{n:"",c:R`
+struct Item: Identifiable { let id: UUID; var title: String }
+
+ScrollView {
+    LazyVStack(spacing: 8) {
+        ForEach(items) { item in       // id из модели — стабильный
+            Row(item: item)
+        }
+    }
+}`}]},
+{t:"Клавиатура и фокус",call:"`@FocusState` управляет фокусом полей; сброс фокуса = скрыть клавиатуру. `.scrollDismissesKeyboard(.interactively)` — скрытие при скролле (iOS 16). Кнопка «Готово» — через `.toolbar { ToolbarItemGroup(placement: .keyboard) }`.",
+d:["`@FocusState private var focused: Field?` с enum — переход между полями по `.onSubmit`.","`.submitLabel(.next)` меняет кнопку Return.","Подъём контента под клавиатуру SwiftUI делает сам (safe area); отключить — `.ignoresSafeArea(.keyboard)`."],
+ex:[{n:"",c:R`
+struct LoginView: View {
+    enum Field { case email, password }
+    @State private var email = "", password = ""
+    @FocusState private var focus: Field?
+
+    var body: some View {
+        Form {
+            TextField("Email", text: $email)
+                .focused($focus, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focus = .password }
+            SecureField("Пароль", text: $password)
+                .focused($focus, equals: .password)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Готово") { focus = nil }
+            }
+        }
+    }
+}`}]},
+{t:"UIKit ↔ SwiftUI",call:"SwiftUI в UIKit — `UIHostingController(rootView:)` (как child VC). UIKit в SwiftUI — `UIViewRepresentable`/`UIViewControllerRepresentable`: `makeUIView` один раз, `updateUIView` при изменениях, события обратно — через `Coordinator`.",
+d:["В `updateUIView` не пересоздавать view, только обновлять свойства, и проверять, изменилось ли значение (иначе циклы обновлений).","Coordinator — делегат UIKit-компонента, держит `Binding` / родительскую структуру.","`sizingOptions = .intrinsicContentSize` у UIHostingController (iOS 16) для автоматического размера."],
+ex:[{n:"",c:R`
+struct SearchBar: UIViewRepresentable {
+    @Binding var text: String
+
+    func makeUIView(context: Context) -> UISearchBar {
+        let bar = UISearchBar()
+        bar.delegate = context.coordinator
+        return bar
+    }
+    func updateUIView(_ bar: UISearchBar, context: Context) {
+        if bar.text != text { bar.text = text }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, UISearchBarDelegate {
+        var text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+        func searchBar(_ bar: UISearchBar, textDidChange t: String) { text.wrappedValue = t }
+    }
+}`}]}
+]});
+
+put({id:"storage",t:"Хранение и сеть",topics:[
+{t:"Keychain",call:"Зашифрованное системное хранилище для секретов (токены, пароли). API — `SecItemAdd`/`SecItemCopyMatching`/`SecItemUpdate`/`SecItemDelete` со словарём атрибутов. Доступность задаётся `kSecAttrAccessible`, обмен между приложениями — access group.",
+d:["`kSecAttrAccessibleAfterFirstUnlock` — доступно в фоне после первой разблокировки; `WhenUnlocked` — только при разблокированном устройстве; суффикс `ThisDeviceOnly` — не переносится в бэкап на другое устройство.","Элементы обычно переживают удаление приложения (документацией не гарантировано) — на первом запуске можно чистить по флагу в UserDefaults.","`errSecDuplicateItem` при повторном Add → делать Update или Delete+Add.","Вызовы потокобезопасны, но синхронные и не мгновенные — не дёргать на main в цикле.","Биометрия: `SecAccessControlCreateWithFlags(... .biometryCurrentSet ...)` + `LAContext`."],
+ex:[{n:"Сохранить и прочитать токен",c:R`
+import Security
+
+enum Keychain {
+    static func save(_ value: String, key: String) -> Bool {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+        ]
+        SecItemDelete(base as CFDictionary)              // убрать старое
+        var add = base
+        add[kSecValueData as String] = Data(value.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func read(_ key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var out: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess,
+              let data = out as? Data else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+_ = Keychain.save("abc123", key: "token")
+print(Keychain.read("token") ?? "nil")   // abc123  (на устройстве/симуляторе)`}]},
+{t:"UserDefaults",call:"Plist-хранилище настроек: маленькие значения (флаги, выбранная тема). Не для секретов (лежит открытым plist в контейнере) и не для больших данных (грузится в память целиком). Для App Group — `UserDefaults(suiteName:)`.",
+d:["`register(defaults:)` задаёт значения по умолчанию в памяти (не пишет на диск) — вызывать на старте.","`bool(forKey:)` для отсутствующего ключа вернёт `false` — нельзя отличить «нет» от «false» без `object(forKey:)`.","`synchronize()` не нужен — устарел.","Кастомные типы — через `Codable` → `Data`; в SwiftUI — `@AppStorage`."],
+ex:[{n:"",c:R`
+let d = UserDefaults.standard
+d.register(defaults: ["onboardingShown": false, "fontSize": 16])
+print(d.integer(forKey: "fontSize"))          // 16
+
+struct Settings: Codable { var theme = "dark" }
+d.set(try? JSONEncoder().encode(Settings()), forKey: "settings")
+let s = (d.data(forKey: "settings")).flatMap { try? JSONDecoder().decode(Settings.self, from: $0) }
+print(s?.theme ?? "-")                        // dark
+
+let shared = UserDefaults(suiteName: "group.com.example.app")   // для виджета/расширения`}]},
+{t:"Файловая система",call:"Documents — данные пользователя (бэкап в iCloud). Application Support — служебные данные приложения (бэкап, можно исключить). Caches — то, что можно скачать заново (система может удалить при нехватке места). tmp — временное, удаляется системой.",
+d:["Большие восстанавливаемые данные вне Caches — пометить `isExcludedFromBackup = true`.","Писать атомарно: `data.write(to:options: .atomic)`.","Data Protection: `.completeFileProtection` — файл недоступен при заблокированном устройстве (фоновые задачи не прочитают).","Пути контейнера меняются между запусками/обновлениями — хранить относительные пути, не абсолютные."],
+ex:[{n:"",c:R`
+let fm = FileManager.default
+let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                         appropriateFor: nil, create: true)
+var dbURL = support.appendingPathComponent("feed.json")
+try Data("[]".utf8).write(to: dbURL, options: [.atomic, .completeFileProtection])
+
+var values = URLResourceValues()
+values.isExcludedFromBackup = true
+try dbURL.setResourceValues(values)
+
+let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+let tmp = fm.temporaryDirectory`}]},
+{t:"Кеширование: NSCache и URLCache",call:"`NSCache` — потокобезопасный in-memory кеш, сам вытесняет при нехватке памяти; лимиты `countLimit`/`totalCostLimit` — мягкие. `URLCache` — HTTP-кеш URLSession (память + диск) по заголовкам `Cache-Control`/`ETag`. Для картинок — NSCache (декодированные) + диск (сырые данные).",
+d:["NSCache: ключи — объекты (`NSString`, `NSURL`), ключи не копирует (в отличие от NSDictionary); значения — классы (`UIImage`, обёртка для struct).","Cost для картинки ≈ `width × height × scale² × 4` байта.","ETag: сервер отдаёт `ETag`, клиент шлёт `If-None-Match`; если не изменилось — `304 Not Modified` без тела. С включённым URLCache URLSession сам подставит закешированный ответ, и вы увидите `200` с данными из кеша.","`cachePolicy`: `.useProtocolCachePolicy` (по умолчанию), `.reloadIgnoringLocalCacheData`, `.returnCacheDataElseLoad` (офлайн)."],
+ex:[{n:"NSCache для картинок",c:R`
+final class ImageMemoryCache {
+    private let cache = NSCache<NSURL, UIImage>()
+    init() {
+        cache.countLimit = 200
+        cache.totalCostLimit = 100 * 1024 * 1024   // ~100 МБ
+    }
+    func set(_ img: UIImage, for url: URL) {
+        let cost = Int(img.size.width * img.scale * img.size.height * img.scale * 4)
+        cache.setObject(img, forKey: url as NSURL, cost: cost)
+    }
+    func get(_ url: URL) -> UIImage? { cache.object(forKey: url as NSURL) }
+}`},
+{n:"URLCache и ETag",c:R`
+let config = URLSessionConfiguration.default
+config.urlCache = URLCache(memoryCapacity: 20 << 20, diskCapacity: 200 << 20)
+config.requestCachePolicy = .useProtocolCachePolicy
+let session = URLSession(configuration: config)
+
+// Ручной ETag (если кеш свой):
+var req = URLRequest(url: URL(string: "https://api.example.com/feed")!)
+req.setValue(savedETag, forHTTPHeaderField: "If-None-Match")
+let (data, resp) = try await session.data(for: req)
+switch (resp as? HTTPURLResponse)?.statusCode {
+case 304: break                        // используем сохранённые данные
+case 200: savedETag = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")
+default: break
+}`}]},
+{t:"Сетевой слой на URLSession",call:"`URLSession.shared.data(for:)` (async) → проверить `HTTPURLResponse.statusCode` → декодировать `Codable`. Ошибки разделять: транспорт (`URLError`), HTTP-статус, декодирование. Отмена — через отмену Task.",
+d:["`URLSession` не бросает ошибку на 404/500 — статус проверять самим.","`URLError.cancelled`/`CancellationError` не показывать пользователю как ошибку.","Повторы — только для идемпотентных запросов и сетевых ошибок, с экспоненциальной задержкой.","`waitsForConnectivity = true` в конфигурации — ждать сеть вместо мгновенной ошибки.","Фоновые загрузки — `URLSessionConfiguration.background(withIdentifier:)`, только delegate-API."],
+ex:[{n:"",c:R`
+enum APIError: Error { case http(Int), decoding(Error) }
+
+struct API {
+    let session: URLSession = .shared
+    func get<T: Decodable>(_ url: URL, as: T.Type = T.self) async throws -> T {
+        let (data, resp) = try await session.data(from: url)   // URLError, CancellationError
+        guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.http(http.statusCode) }
+        do {
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(T.self, from: data)
+        } catch { throw APIError.decoding(error) }
+    }
+}
+struct User: Decodable { let id: Int; let firstName: String }   // first_name в JSON`}]},
+{t:"Нормализация данных и базы",call:"Нормализация — хранить сущность один раз и ссылаться по id, чтобы обновление (лайк, имя автора) было видно везде. Хранилища: Core Data / SwiftData (граф объектов, миграции), SQLite/GRDB (контроль SQL), Realm. Для простого кеша — JSON-файл.",
+d:["Денормализованные данные: один и тот же автор копируется в каждый пост → после правки рассинхрон.","Core Data: контекст не потокобезопасен — `perform {}` на его очереди; между потоками передавать `NSManagedObjectID`.","SwiftData (iOS 17): `@Model`, `ModelContext`, `@Query` в SwiftUI; контекст тоже привязан к актору.","Миграции схемы продумывать заранее (lightweight / versioned schema)."],
+ex:[{n:"Нормализованный стор",c:R`
+struct User: Identifiable { let id: Int; var name: String }
+struct Post: Identifiable { let id: Int; let authorID: Int; var text: String }
+
+struct Store {
+    var users: [Int: User] = [:]
+    var posts: [Int: Post] = [:]
+    func author(of post: Post) -> User? { users[post.authorID] }
+}
+var store = Store()
+store.users[1] = User(id: 1, name: "Roman")
+store.posts[10] = Post(id: 10, authorID: 1, text: "hi")
+store.posts[11] = Post(id: 11, authorID: 1, text: "hello")
+store.users[1]?.name = "Роман"      // одна правка → видно во всех постах
+print(store.author(of: store.posts[11]!)!.name)   // Роман`}]}
+]});
+
 const app=document.getElementById('app'),bar=document.getElementById('bar');
 let query='';
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
