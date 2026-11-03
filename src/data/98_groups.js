@@ -1,0 +1,34 @@
+const G={
+swift:[["types","Типы и память","value vs reference, COW, struct vs class",["Value vs","Struct vs"]],
+ ["dispatch","Диспетчеризация","static / vtable / witness table / message; как получить static",["Четыре вида","Как получить static"]],
+ ["protocols","Протоколы и extension","задача P/C/S, default-реализации, where, композиция",["Протоколы и дисп","Protocol extension"]],
+ ["generics","Generics и some/any","ограничения, associatedtype, type erasure, opaque vs existential",["Generics","some vs any"]]],
+arc:[["refs","Ссылки и счётчики","strong / weak / unowned, коллекции слабых ссылок",["ARC:","Коллекции слабых"]],
+ ["closures","Замыкания и циклы","retain cycle, capture list 3 3 3 vs 0 1 2, lazy var",["Retain cycle","Capture list","lazy var"]]],
+gcd:[["queues","Очереди и deadlock","serial/concurrent, sync/async, deadlock, thread explosion",["Очередь","sync, async","Thread explosion"]],
+ ["sync","Синхронизация","barrier, semaphore 0/1/N, DispatchGroup",["Barrier","DispatchSemaphore","DispatchGroup"]],
+ ["ops","Operation и Thread","зависимости и отмена, RunLoop",["Operation","Thread и RunLoop"]]],
+conc:[["basics","Основы и мост с колбэками","await и пул потоков, sleep/yield, continuations",["async/await","Task.sleep","Continuations"]],
+ ["structured","Структурность и отмена","async let, TaskGroup, кооперативная отмена",["Structured","Отмена"]],
+ ["isolation","Изоляция и синхронизация","actor и реентрантность, MainActor/Sendable, Mutex",["Actor","@MainActor","Блокировки"]]],
+uikit:[["vc","ViewController","жизненный цикл, что куда класть, навигация и child VC",["Жизненный","viewDidLoad vs","Навигация"]],
+ ["touch","Касания и клавиатура","hitTest, responder chain, скрыть/подвинуть клавиатуру",["Hit-testing","Клавиатура"]],
+ ["layout","Layout","intrinsicContentSize, hugging/compression, frame vs bounds",["Auto Layout","Frames vs"]]],
+render:[["ca","Core Animation","путь кадра, hitches, неявные анимации, model/presentation",["Как кадр","CALayer"]],
+ ["perf","Производительность","offscreen, blending, плавные списки, Instruments",["Offscreen","Плавные","Instruments"]]],
+swiftui:[["state","Состояние и identity","identity, @State/@Binding/@Observable, .task",["Identity","Состояние",".task"]],
+ ["ui","Списки, ввод, UIKit","List vs LazyVStack, @FocusState, Representable",["List vs","Клавиатура","UIKit ↔"]]],
+storage:[["persist","Хранилища","Keychain, UserDefaults, файлы, нормализация",["Keychain","UserDefaults","Файловая","Нормализация"]],
+ ["net","Сеть и кеш","URLSession-слой, NSCache, URLCache, ETag",["Сетевой","Кеширование"]]],
+cs:[["coll","Сложность и коллекции","Big-O таблица, вставка в массив, Hashable",["Таблица","Вставка","Hashable"]],
+ ["algo","Алгоритмы","стабильная сортировка, бинпоиск, BFS/DFS",["Сортировка","Деревья"]]],
+objc:[["syntax","Синтаксис и память","класс, сообщения nil, атрибуты свойств, блоки",["Класс","Сообщения","Атрибуты","Блоки"]],
+ ["interop","Делегаты и мост со Swift","@optional, respondsToSelector, nullability",["Протоколы и делегаты","Мост"]],
+ ["runtime","Runtime","forwarding, swizzling, associated objects, KVO",["Runtime"]]],
+tasks:[["review","Ревью ImageFetcher","как вести ревью, 8 групп проблем, исправленный код",["Как вести","Ревью ImageFetcher","ImageFetcher: исправ"]],
+ ["mt","Многопоточный обход","DFS + DispatchGroup, TaskGroup",["Многопоточный"]],
+ ["end","Конец собеса","вопросы компании",["Вопросы"]]]
+};
+S.forEach(s=>{const g=G[s.id];if(!g)return;const used=new Set();
+ s.subs=g.map(([id,t,sum,pref])=>({id,t,sum,topics:pref.map(p=>{const i=s.topics.findIndex((x,j)=>!used.has(j)&&x.t.startsWith(p));if(i<0)throw new Error('no topic '+s.id+':'+p);used.add(i);return s.topics[i]})}));
+ if(used.size!==s.topics.length)throw new Error('unassigned in '+s.id+': '+s.topics.filter((x,j)=>!used.has(j)).map(x=>x.t));});

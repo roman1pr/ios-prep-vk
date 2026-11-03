@@ -115,6 +115,50 @@ func total(_ s: some Shape) -> Double { s.area() }  // = generic <T: Shape>`},
 // let a: any Equatable = 1; let b: any Equatable = "x"; a == b   // ❌
 func same<T: Equatable>(_ a: T, _ b: T) -> Bool { a == b }     // ✅
 print(same(1, 1))   // true`}]},
+{t:"Четыре вида диспетчеризации",call:"Static — адрес функции известен при компиляции (struct/enum, `final`, `private`, методы в extension класса, специализированные generics). Vtable — overridable методы класса: индекс в таблице класса. Witness table — вызов требования протокола через `any P` или неспециализированный generic. Message — `objc_msgSend` по селектору (`@objc dynamic`), ищется в рантайме.",
+d:["От быстрого к медленному: static (можно инлайнить) → vtable (одно косвенное обращение) → witness table (косвенное + existential-контейнер) → message (поиск в кеше методов/иерархии).","Главный выигрыш static — не сам вызов, а инлайнинг и оптимизации после него.","Vtable есть только у классов; у struct методов в таблице нет — нечего переопределять.","Message dispatch нужен для KVO, swizzling, `#selector`/target-action (там достаточно `@objc`, без `dynamic`).","Один и тот же метод может вызываться по-разному: через `S()` — static, через `any P` — witness table."],
+ex:[{n:"Один метод — разные способы вызова",c:R`
+protocol Drawable { func draw() }
+struct Circle: Drawable { func draw() { print("circle") } }
+class Shape { func draw() { print("shape") } }
+final class Square: Shape { override func draw() { print("square") } }
+
+Circle().draw()                  // static
+let d: any Drawable = Circle()
+d.draw()                         // witness table
+let s: Shape = Square()
+s.draw()                         // vtable → square
+func render<T: Drawable>(_ x: T) { x.draw() }   // witness table или static после специализации
+render(Circle())`}]},
+{t:"Protocol extension: default, where, композиция",call:"Extension протокола даёт реализацию по умолчанию; `extension P where Self: UIView` / `where Element: Equatable` — реализация только для подходящих типов. Композиция `P & Q` вместо больших протоколов. Conditional conformance: `extension Array: P where Element: P`. Протоколы — основа DI и моков в тестах.",
+d:["Default-реализация, объявленная и в протоколе (requirement), переопределяется типом динамически; только в extension — статически (см. задачу P/C/S).","Маленькие протоколы (`Loading`, `Caching`) легче мокать и комбинировать, чем один «God protocol».","`AnyObject`-ограничение (`protocol Delegate: AnyObject`) нужно для `weak var delegate`.","Associated type / `Self`-требования делают протокол непригодным для `any P` без стирания до Swift 5.7; с 5.7 — `any P` можно, но методы с `Self` в аргументах недоступны."],
+ex:[{n:"Default, where и conditional conformance",c:R`
+protocol Describable { var text: String { get } }
+extension Describable { var text: String { "\(Self.self)" } }          // default
+
+struct User: Describable {}
+print(User().text)                       // User
+
+extension Array: Describable where Element: Describable {
+    var text: String { map(\.text).joined(separator: ", ") }
+}
+print([User(), User()].text)             // User, User
+
+extension Collection where Element: Numeric {
+    var total: Element { reduce(0, +) }
+}
+print([1, 2, 3].total)                   // 6`},
+{n:"Композиция и мок для теста",c:R`
+protocol Loading { func load() async throws -> Data }
+protocol Caching: AnyObject { func store(_ d: Data) }
+
+final class Repo {
+    private let api: any Loading
+    private weak var cache: (any Caching)?
+    init(api: any Loading, cache: any Caching) { self.api = api; self.cache = cache }
+    func refresh() async throws { cache?.store(try await api.load()) }
+}
+struct MockAPI: Loading { func load() async throws -> Data { Data("ok".utf8) } }`}]},
 {t:"Как получить static dispatch",call:"`final` и `private`/`fileprivate` (нельзя переопределить), WMO (компилятор сам выводит final для internal), методы в extension класса, struct/enum, generics и `some` вместо `any`, `@inlinable` для кросс-модульной специализации. `dynamic`/`@objc dynamic` — наоборот, message dispatch.",
 d:["Виды: static (прямой адрес, можно инлайнить) → vtable (class, overridable) → witness table (протоколы, `any`) → message dispatch (`objc_msgSend`, `dynamic`).","Методы в `extension` класса не попадают в vtable → статические (и их нельзя override без `@objc`).","WMO (Whole Module Optimization, по умолчанию в Release) видит весь модуль и делает internal-классы без наследников фактически final.","`@inline(__always)`, `@_specialize` (подчёркнутый, неофициальный) — точечные подсказки.","Влияние на собесе: static dispatch даёт инлайн и дальнейшие оптимизации, а не просто «на пару наносекунд быстрее»."],
 ex:[{n:"",c:R`

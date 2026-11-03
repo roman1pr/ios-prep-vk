@@ -46,6 +46,18 @@ h1{font-size:22px;margin:6px 0 4px}
 .chk li{margin:10px 0}
 .chk .s{color:var(--mut);font-size:12px}
 .empty{color:var(--mut);padding:20px;text-align:center}
+.subcard{display:block;text-decoration:none;color:var(--txt);background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:8px 0;min-width:0}
+.subcard:active{background:var(--card2)}
+.subcard .h{font-weight:650;font-size:16.5px}
+.subcard .sm{color:#cfe3ff;font-size:14px;margin-top:3px}
+.subcard .tl{color:var(--mut);font-size:12.5px;margin-top:6px;overflow-wrap:anywhere}
+.subcard .go{color:var(--acc);font-size:13px;margin-top:6px}
+.crumb{flex:1;min-width:0;text-align:center;line-height:1.2}
+.crumb a,.crumb span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb a{color:var(--mut);font-size:12px;text-decoration:none}
+.crumb span{font-weight:600;font-size:15px}
+.chk h3{font-size:15px;margin:18px 0 0;color:var(--acc)}
+.chk h3 a{text-decoration:none}
 </style>
 </head>
 <body>
@@ -66,18 +78,27 @@ app.innerHTML=`<h1>Повтор перед собесом</h1><div class="sub">�
 const q=document.getElementById('q');q.oninput=()=>{query=q.value;results()};results();}
 function results(){
 const r=document.getElementById('res'),ql=query.trim().toLowerCase();
-if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона»':s.topics.length+' тем'}</div></a>`).join('')+'</div>';return}
-let out='';S.forEach(s=>s.topics.forEach(t=>{const hay=[t.t,t.call,s.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t)}));
+if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}${s.check?'':' · '+s.topics.length+' тем'}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона» на одном экране':esc(s.subs.map(x=>x.t).join(' · '))}</div></a>`).join('')+'</div>';return}
+let out='';S.forEach(s=>(s.subs||[]).forEach(u=>u.topics.forEach(t=>{const hay=[t.t,t.call,s.t,u.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t+' › '+u.t)})));
 r.innerHTML=out||'<div class="empty">Ничего не найдено</div>';}
+const L=[];S.forEach(s=>(s.subs||[]).forEach(u=>L.push({s,u})));
 function section(i){
 const s=S[i],p=S[(i-1+S.length)%S.length],n=S[(i+1)%S.length];
-bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}" aria-label="назад">‹</a><span class="ttl">${i+1}. ${esc(s.t)}</span><a class="btn" href="#${n.id}" aria-label="вперёд">›</a>`;
+bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}" aria-label="предыдущий раздел">‹</a><span class="ttl">${i+1}. ${esc(s.t)}</span><a class="btn" href="#${n.id}" aria-label="следующий раздел">›</a>`;
 let h=`<h1>${esc(s.t)}</h1>`;
-if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><ol class="chk">';S.forEach(x=>x.topics.forEach(t=>{h+=`<li><b>${esc(t.t)}</b><div class="s">${esc(x.t)}</div>${fmt(t.call)}</li>`}));h+='</ol>'}
-else h+=s.topics.map(t=>topicHTML(t)).join('');
+if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><div class="chk">';let k=0;S.forEach(x=>(x.subs||[]).forEach(u=>{h+=`<h3><a href="#${x.id}/${u.id}">${esc(x.t)} › ${esc(u.t)}</a></h3><ol start="${k+1}">`;u.topics.forEach(t=>{k++;h+=`<li><b>${esc(t.t)}</b><br>${fmt(t.call)}</li>`});h+='</ol>'}));h+='</div>'}
+else{h+=`<div class="sub">${s.subs.length} подраздела · ${s.topics.length} тем</div>`;h+=s.subs.map(u=>`<a class="subcard" href="#${s.id}/${u.id}"><div class="h">${esc(u.t)}</div><div class="sm">${esc(u.sum)}</div><div class="tl">${u.topics.map(t=>esc(t.t)).join(' · ')}</div><div class="go">${u.topics.length} ${u.topics.length===1?'тема':u.topics.length<5?'темы':'тем'} ›</div></a>`).join('')}
 h+=`<div class="nav2"><a class="btn" href="#${p.id}">‹ ${esc(p.t)}</a><a class="btn" href="#${n.id}">${esc(n.t)} ›</a></div>`;
 app.innerHTML=h;}
-function render(){const id=location.hash.slice(1),i=S.findIndex(s=>s.id===id);if(i<0)home();else section(i)}
+function sub(j){
+const {s,u}=L[j],p=L[(j-1+L.length)%L.length],n=L[(j+1)%L.length];
+bar.innerHTML=`<a class="btn" href="#${s.id}" aria-label="к разделу">←</a><div class="crumb"><a href="#${s.id}">${esc(s.t)}</a><span>${esc(u.t)}</span></div><a class="btn" href="#${p.s.id}/${p.u.id}" aria-label="предыдущий подраздел">‹</a><a class="btn" href="#${n.s.id}/${n.u.id}" aria-label="следующий подраздел">›</a>`;
+let h=`<h1>${esc(u.t)}</h1><div class="sub"><a href="#">Разделы</a> › <a href="#${s.id}">${esc(s.t)}</a> · ${esc(u.sum)}</div>`;
+h+=u.topics.map(t=>topicHTML(t)).join('');
+h+=`<div class="nav2"><a class="btn" href="#${p.s.id}/${p.u.id}">‹ ${esc(p.u.t)}</a><a class="btn" href="#${n.s.id}/${n.u.id}">${esc(n.u.t)} ›</a></div>`;
+app.innerHTML=h;}
+function render(){const [a,b]=decodeURIComponent(location.hash.slice(1)).split('/'),i=S.findIndex(s=>s.id===a);
+if(i<0)return home();if(b){const j=L.findIndex(x=>x.s.id===a&&x.u.id===b);if(j>=0)return sub(j)}section(i)}
 window.addEventListener('hashchange',()=>{render();scrollTo(0,0)});render();
 </script>
 </body>

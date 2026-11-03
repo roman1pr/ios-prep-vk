@@ -46,6 +46,18 @@ h1{font-size:22px;margin:6px 0 4px}
 .chk li{margin:10px 0}
 .chk .s{color:var(--mut);font-size:12px}
 .empty{color:var(--mut);padding:20px;text-align:center}
+.subcard{display:block;text-decoration:none;color:var(--txt);background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:8px 0;min-width:0}
+.subcard:active{background:var(--card2)}
+.subcard .h{font-weight:650;font-size:16.5px}
+.subcard .sm{color:#cfe3ff;font-size:14px;margin-top:3px}
+.subcard .tl{color:var(--mut);font-size:12.5px;margin-top:6px;overflow-wrap:anywhere}
+.subcard .go{color:var(--acc);font-size:13px;margin-top:6px}
+.crumb{flex:1;min-width:0;text-align:center;line-height:1.2}
+.crumb a,.crumb span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb a{color:var(--mut);font-size:12px;text-decoration:none}
+.crumb span{font-weight:600;font-size:15px}
+.chk h3{font-size:15px;margin:18px 0 0;color:var(--acc)}
+.chk h3 a{text-decoration:none}
 </style>
 </head>
 <body>
@@ -182,6 +194,50 @@ func total(_ s: some Shape) -> Double { s.area() }  // = generic <T: Shape>`},
 // let a: any Equatable = 1; let b: any Equatable = "x"; a == b   // ❌
 func same<T: Equatable>(_ a: T, _ b: T) -> Bool { a == b }     // ✅
 print(same(1, 1))   // true`}]},
+{t:"Четыре вида диспетчеризации",call:"Static — адрес функции известен при компиляции (struct/enum, `final`, `private`, методы в extension класса, специализированные generics). Vtable — overridable методы класса: индекс в таблице класса. Witness table — вызов требования протокола через `any P` или неспециализированный generic. Message — `objc_msgSend` по селектору (`@objc dynamic`), ищется в рантайме.",
+d:["От быстрого к медленному: static (можно инлайнить) → vtable (одно косвенное обращение) → witness table (косвенное + existential-контейнер) → message (поиск в кеше методов/иерархии).","Главный выигрыш static — не сам вызов, а инлайнинг и оптимизации после него.","Vtable есть только у классов; у struct методов в таблице нет — нечего переопределять.","Message dispatch нужен для KVO, swizzling, `#selector`/target-action (там достаточно `@objc`, без `dynamic`).","Один и тот же метод может вызываться по-разному: через `S()` — static, через `any P` — witness table."],
+ex:[{n:"Один метод — разные способы вызова",c:R`
+protocol Drawable { func draw() }
+struct Circle: Drawable { func draw() { print("circle") } }
+class Shape { func draw() { print("shape") } }
+final class Square: Shape { override func draw() { print("square") } }
+
+Circle().draw()                  // static
+let d: any Drawable = Circle()
+d.draw()                         // witness table
+let s: Shape = Square()
+s.draw()                         // vtable → square
+func render<T: Drawable>(_ x: T) { x.draw() }   // witness table или static после специализации
+render(Circle())`}]},
+{t:"Protocol extension: default, where, композиция",call:"Extension протокола даёт реализацию по умолчанию; `extension P where Self: UIView` / `where Element: Equatable` — реализация только для подходящих типов. Композиция `P & Q` вместо больших протоколов. Conditional conformance: `extension Array: P where Element: P`. Протоколы — основа DI и моков в тестах.",
+d:["Default-реализация, объявленная и в протоколе (requirement), переопределяется типом динамически; только в extension — статически (см. задачу P/C/S).","Маленькие протоколы (`Loading`, `Caching`) легче мокать и комбинировать, чем один «God protocol».","`AnyObject`-ограничение (`protocol Delegate: AnyObject`) нужно для `weak var delegate`.","Associated type / `Self`-требования делают протокол непригодным для `any P` без стирания до Swift 5.7; с 5.7 — `any P` можно, но методы с `Self` в аргументах недоступны."],
+ex:[{n:"Default, where и conditional conformance",c:R`
+protocol Describable { var text: String { get } }
+extension Describable { var text: String { "\(Self.self)" } }          // default
+
+struct User: Describable {}
+print(User().text)                       // User
+
+extension Array: Describable where Element: Describable {
+    var text: String { map(\.text).joined(separator: ", ") }
+}
+print([User(), User()].text)             // User, User
+
+extension Collection where Element: Numeric {
+    var total: Element { reduce(0, +) }
+}
+print([1, 2, 3].total)                   // 6`},
+{n:"Композиция и мок для теста",c:R`
+protocol Loading { func load() async throws -> Data }
+protocol Caching: AnyObject { func store(_ d: Data) }
+
+final class Repo {
+    private let api: any Loading
+    private weak var cache: (any Caching)?
+    init(api: any Loading, cache: any Caching) { self.api = api; self.cache = cache }
+    func refresh() async throws { cache?.store(try await api.load()) }
+}
+struct MockAPI: Loading { func load() async throws -> Data { Data("ok".utf8) } }`}]},
 {t:"Как получить static dispatch",call:"`final` и `private`/`fileprivate` (нельзя переопределить), WMO (компилятор сам выводит final для internal), методы в extension класса, struct/enum, generics и `some` вместо `any`, `@inlinable` для кросс-модульной специализации. `dynamic`/`@objc dynamic` — наоборот, message dispatch.",
 d:["Виды: static (прямой адрес, можно инлайнить) → vtable (class, overridable) → witness table (протоколы, `any`) → message dispatch (`objc_msgSend`, `dynamic`).","Методы в `extension` класса не попадают в vtable → статические (и их нельзя override без `@objc`).","WMO (Whole Module Optimization, по умолчанию в Release) видит весь модуль и делает internal-классы без наследников фактически final.","`@inline(__always)`, `@_specialize` (подчёркнутый, неофициальный) — точечные подсказки.","Влияние на собесе: static dispatch даёт инлайн и дальнейшие оптимизации, а не просто «на пару наносекунд быстрее»."],
 ex:[{n:"",c:R`
@@ -1514,6 +1570,41 @@ ex:[]}
 
 put({id:"check",t:"Чек-лист перед собесом",check:true,topics:[]});
 
+const G={
+swift:[["types","Типы и память","value vs reference, COW, struct vs class",["Value vs","Struct vs"]],
+ ["dispatch","Диспетчеризация","static / vtable / witness table / message; как получить static",["Четыре вида","Как получить static"]],
+ ["protocols","Протоколы и extension","задача P/C/S, default-реализации, where, композиция",["Протоколы и дисп","Protocol extension"]],
+ ["generics","Generics и some/any","ограничения, associatedtype, type erasure, opaque vs existential",["Generics","some vs any"]]],
+arc:[["refs","Ссылки и счётчики","strong / weak / unowned, коллекции слабых ссылок",["ARC:","Коллекции слабых"]],
+ ["closures","Замыкания и циклы","retain cycle, capture list 3 3 3 vs 0 1 2, lazy var",["Retain cycle","Capture list","lazy var"]]],
+gcd:[["queues","Очереди и deadlock","serial/concurrent, sync/async, deadlock, thread explosion",["Очередь","sync, async","Thread explosion"]],
+ ["sync","Синхронизация","barrier, semaphore 0/1/N, DispatchGroup",["Barrier","DispatchSemaphore","DispatchGroup"]],
+ ["ops","Operation и Thread","зависимости и отмена, RunLoop",["Operation","Thread и RunLoop"]]],
+conc:[["basics","Основы и мост с колбэками","await и пул потоков, sleep/yield, continuations",["async/await","Task.sleep","Continuations"]],
+ ["structured","Структурность и отмена","async let, TaskGroup, кооперативная отмена",["Structured","Отмена"]],
+ ["isolation","Изоляция и синхронизация","actor и реентрантность, MainActor/Sendable, Mutex",["Actor","@MainActor","Блокировки"]]],
+uikit:[["vc","ViewController","жизненный цикл, что куда класть, навигация и child VC",["Жизненный","viewDidLoad vs","Навигация"]],
+ ["touch","Касания и клавиатура","hitTest, responder chain, скрыть/подвинуть клавиатуру",["Hit-testing","Клавиатура"]],
+ ["layout","Layout","intrinsicContentSize, hugging/compression, frame vs bounds",["Auto Layout","Frames vs"]]],
+render:[["ca","Core Animation","путь кадра, hitches, неявные анимации, model/presentation",["Как кадр","CALayer"]],
+ ["perf","Производительность","offscreen, blending, плавные списки, Instruments",["Offscreen","Плавные","Instruments"]]],
+swiftui:[["state","Состояние и identity","identity, @State/@Binding/@Observable, .task",["Identity","Состояние",".task"]],
+ ["ui","Списки, ввод, UIKit","List vs LazyVStack, @FocusState, Representable",["List vs","Клавиатура","UIKit ↔"]]],
+storage:[["persist","Хранилища","Keychain, UserDefaults, файлы, нормализация",["Keychain","UserDefaults","Файловая","Нормализация"]],
+ ["net","Сеть и кеш","URLSession-слой, NSCache, URLCache, ETag",["Сетевой","Кеширование"]]],
+cs:[["coll","Сложность и коллекции","Big-O таблица, вставка в массив, Hashable",["Таблица","Вставка","Hashable"]],
+ ["algo","Алгоритмы","стабильная сортировка, бинпоиск, BFS/DFS",["Сортировка","Деревья"]]],
+objc:[["syntax","Синтаксис и память","класс, сообщения nil, атрибуты свойств, блоки",["Класс","Сообщения","Атрибуты","Блоки"]],
+ ["interop","Делегаты и мост со Swift","@optional, respondsToSelector, nullability",["Протоколы и делегаты","Мост"]],
+ ["runtime","Runtime","forwarding, swizzling, associated objects, KVO",["Runtime"]]],
+tasks:[["review","Ревью ImageFetcher","как вести ревью, 8 групп проблем, исправленный код",["Как вести","Ревью ImageFetcher","ImageFetcher: исправ"]],
+ ["mt","Многопоточный обход","DFS + DispatchGroup, TaskGroup",["Многопоточный"]],
+ ["end","Конец собеса","вопросы компании",["Вопросы"]]]
+};
+S.forEach(s=>{const g=G[s.id];if(!g)return;const used=new Set();
+ s.subs=g.map(([id,t,sum,pref])=>({id,t,sum,topics:pref.map(p=>{const i=s.topics.findIndex((x,j)=>!used.has(j)&&x.t.startsWith(p));if(i<0)throw new Error('no topic '+s.id+':'+p);used.add(i);return s.topics[i]})}));
+ if(used.size!==s.topics.length)throw new Error('unassigned in '+s.id+': '+s.topics.filter((x,j)=>!used.has(j)).map(x=>x.t));});
+
 const app=document.getElementById('app'),bar=document.getElementById('bar');
 let query='';
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -1526,18 +1617,27 @@ app.innerHTML=`<h1>Повтор перед собесом</h1><div class="sub">�
 const q=document.getElementById('q');q.oninput=()=>{query=q.value;results()};results();}
 function results(){
 const r=document.getElementById('res'),ql=query.trim().toLowerCase();
-if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона»':s.topics.length+' тем'}</div></a>`).join('')+'</div>';return}
-let out='';S.forEach(s=>s.topics.forEach(t=>{const hay=[t.t,t.call,s.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t)}));
+if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}${s.check?'':' · '+s.topics.length+' тем'}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона» на одном экране':esc(s.subs.map(x=>x.t).join(' · '))}</div></a>`).join('')+'</div>';return}
+let out='';S.forEach(s=>(s.subs||[]).forEach(u=>u.topics.forEach(t=>{const hay=[t.t,t.call,s.t,u.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t+' › '+u.t)})));
 r.innerHTML=out||'<div class="empty">Ничего не найдено</div>';}
+const L=[];S.forEach(s=>(s.subs||[]).forEach(u=>L.push({s,u})));
 function section(i){
 const s=S[i],p=S[(i-1+S.length)%S.length],n=S[(i+1)%S.length];
-bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}" aria-label="назад">‹</a><span class="ttl">${i+1}. ${esc(s.t)}</span><a class="btn" href="#${n.id}" aria-label="вперёд">›</a>`;
+bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}" aria-label="предыдущий раздел">‹</a><span class="ttl">${i+1}. ${esc(s.t)}</span><a class="btn" href="#${n.id}" aria-label="следующий раздел">›</a>`;
 let h=`<h1>${esc(s.t)}</h1>`;
-if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><ol class="chk">';S.forEach(x=>x.topics.forEach(t=>{h+=`<li><b>${esc(t.t)}</b><div class="s">${esc(x.t)}</div>${fmt(t.call)}</li>`}));h+='</ol>'}
-else h+=s.topics.map(t=>topicHTML(t)).join('');
+if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><div class="chk">';let k=0;S.forEach(x=>(x.subs||[]).forEach(u=>{h+=`<h3><a href="#${x.id}/${u.id}">${esc(x.t)} › ${esc(u.t)}</a></h3><ol start="${k+1}">`;u.topics.forEach(t=>{k++;h+=`<li><b>${esc(t.t)}</b><br>${fmt(t.call)}</li>`});h+='</ol>'}));h+='</div>'}
+else{h+=`<div class="sub">${s.subs.length} подраздела · ${s.topics.length} тем</div>`;h+=s.subs.map(u=>`<a class="subcard" href="#${s.id}/${u.id}"><div class="h">${esc(u.t)}</div><div class="sm">${esc(u.sum)}</div><div class="tl">${u.topics.map(t=>esc(t.t)).join(' · ')}</div><div class="go">${u.topics.length} ${u.topics.length===1?'тема':u.topics.length<5?'темы':'тем'} ›</div></a>`).join('')}
 h+=`<div class="nav2"><a class="btn" href="#${p.id}">‹ ${esc(p.t)}</a><a class="btn" href="#${n.id}">${esc(n.t)} ›</a></div>`;
 app.innerHTML=h;}
-function render(){const id=location.hash.slice(1),i=S.findIndex(s=>s.id===id);if(i<0)home();else section(i)}
+function sub(j){
+const {s,u}=L[j],p=L[(j-1+L.length)%L.length],n=L[(j+1)%L.length];
+bar.innerHTML=`<a class="btn" href="#${s.id}" aria-label="к разделу">←</a><div class="crumb"><a href="#${s.id}">${esc(s.t)}</a><span>${esc(u.t)}</span></div><a class="btn" href="#${p.s.id}/${p.u.id}" aria-label="предыдущий подраздел">‹</a><a class="btn" href="#${n.s.id}/${n.u.id}" aria-label="следующий подраздел">›</a>`;
+let h=`<h1>${esc(u.t)}</h1><div class="sub"><a href="#">Разделы</a> › <a href="#${s.id}">${esc(s.t)}</a> · ${esc(u.sum)}</div>`;
+h+=u.topics.map(t=>topicHTML(t)).join('');
+h+=`<div class="nav2"><a class="btn" href="#${p.s.id}/${p.u.id}">‹ ${esc(p.u.t)}</a><a class="btn" href="#${n.s.id}/${n.u.id}">${esc(n.u.t)} ›</a></div>`;
+app.innerHTML=h;}
+function render(){const [a,b]=decodeURIComponent(location.hash.slice(1)).split('/'),i=S.findIndex(s=>s.id===a);
+if(i<0)return home();if(b){const j=L.findIndex(x=>x.s.id===a&&x.u.id===b);if(j>=0)return sub(j)}section(i)}
 window.addEventListener('hashchange',()=>{render();scrollTo(0,0)});render();
 </script>
 </body>
