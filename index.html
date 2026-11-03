@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>iOS собес VK — повтор</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--txt:#e6e8ee;--mut:#9aa1ad;--acc:#4f9dff;--hot:#ff7a45;--weak:#f5c542;--bd:#2a2f3a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+a{color:var(--acc)}
+code{font:13px/1.4 ui-monospace,Menlo,monospace;background:#262b36;padding:1px 4px;border-radius:4px}
+pre{background:#11141a;border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0}
+pre code{background:none;padding:0;font-size:12.5px}
+.bar{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--bd);padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));display:flex;gap:6px;align-items:center}
+.btn{background:var(--card2);color:var(--txt);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font-size:15px;min-height:42px;cursor:pointer;white-space:nowrap}
+.btn.on{background:var(--hot);border-color:var(--hot);color:#111;font-weight:600}
+.bar .ttl{flex:1;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+main{max-width:820px;margin:0 auto;padding:12px 12px 80px}
+h1{font-size:22px;margin:6px 0 4px}
+.sub{color:var(--mut);font-size:14px;margin-bottom:12px}
+#q{width:100%;font-size:17px;padding:12px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--txt);margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:620px){.grid{grid-template-columns:repeat(3,1fr)}}
+.tile{display:block;text-decoration:none;color:var(--txt);background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 12px;min-height:96px}
+.tile:active{background:var(--card2)}
+.tile .n{color:var(--mut);font-size:12px}
+.tile .h{font-weight:650;font-size:16px;margin:2px 0 4px}
+.tile .c{color:var(--mut);font-size:12.5px}
+.topic{background:var(--card);border:1px solid var(--bd);border-radius:12px;margin:8px 0;overflow:hidden}
+.topic>summary{list-style:none;padding:12px 12px;cursor:pointer}
+.topic>summary::-webkit-details-marker{display:none}
+.topic .tt{font-weight:650;font-size:16px}
+.tag{font-size:11.5px;padding:1px 6px;border-radius:6px;margin-left:4px;vertical-align:middle;white-space:nowrap}
+.tag.must{background:rgba(255,122,69,.18);color:var(--hot)}
+.tag.weak{background:rgba(245,197,66,.16);color:var(--weak)}
+.call{color:#cfe3ff;font-size:14.5px;margin-top:6px;border-left:3px solid var(--acc);padding-left:8px}
+.call b{color:var(--acc);font-weight:600}
+.det{padding:0 12px 12px;border-top:1px dashed var(--bd)}
+.det ul{margin:10px 0 4px;padding-left:18px}
+.det li{margin:4px 0}
+.sec-lbl{color:var(--mut);font-size:12px}
+.nav2{display:flex;gap:8px;margin-top:18px}
+.nav2 a{flex:1;text-align:center;text-decoration:none}
+.chk li{margin:8px 0}
+.chk .s{color:var(--mut);font-size:12px}
+.empty{color:var(--mut);padding:20px;text-align:center}
+.small{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<main id="app"></main>
+<script>
+const S=[
+{id:"swift",t:"Swift core",topics:[
+{t:"Value vs reference, COW",tags:["must","weak"],call:"Struct копируется, class — общая ссылка. Коллекции stdlib копируются лениво (COW) только при мутации; class-поле внутри struct остаётся общим.",
+b:["Struct с полем-классом: при копировании копируется только ссылка — <code>b.box.value = 10</code> меняет и <code>a</code>.","Массив внутри struct копируется при мутации (COW), объект класса — нет.","Свой COW: перед мутацией <code>isKnownUniquelyReferenced(&box)</code>, если не уникален — скопировать объект."]},
+{t:"Struct vs class",tags:["must"],call:"Struct — value, без наследования, обычно static dispatch; class — reference, ARC, наследование, deinit, identity (===).",
+b:["Class: наследование, <code>deinit</code>, ссылочная идентичность, подсчёт ссылок.","Struct: копирование, mutating-методы, нет ARC-накладных на сам value (если нет ссылочных полей).","По умолчанию — struct; class, когда нужна идентичность/общее состояние."]},
+{t:"Протоколы и диспетчеризация в extension (задача P/C/S)",tags:["must"],call:"Метод, объявленный в протоколе (requirement), — динамический через witness table; метод только в extension протокола — статический по типу переменной.",
+b:["Без requirement: через переменную типа протокола вызовется реализация из extension протокола.","С requirement: вызов идёт в реализацию конкретного типа (class/struct).","Ответ на задачу: без requirement — protocol/class/protocol; с ним — class/class/struct."]},
+{t:"Generics",tags:["must"],call:"Обобщённый код с ограничениями; при специализации компилятор генерирует версию под конкретный тип → static dispatch; без неё передаются метаданные типа и witness tables.",
+b:["Ограничения: <code>&lt;T: Equatable&gt;</code>, <code>where</code>.","Специализация (в том же модуле / WMO / <code>@inlinable</code>) убирает накладные.","Без специализации: работа через type metadata + protocol witness table."]},
+{t:"some vs any, associatedtype",tags:["must","weak"],call:"some — opaque type: один конкретный тип, известный компилятору (static); any — existential: коробка с любым типом, динамический dispatch.",
+b:["<code>some View</code> — тип фиксирован, скрыт от вызывающего.","<code>any P</code> — existential container, может держать разные типы; дороже.","Протокол с <code>associatedtype</code>/<code>Self</code> — используем через generics или <code>some</code>; <code>any</code> с ними возможен (Swift 5.7+), но с ограничениями."]},
+{t:"Как получить static dispatch",tags:["must"],call:"final, private/fileprivate, WMO, методы в extension класса, struct/enum, generics/some вместо any, @inlinable; избегать dynamic.",
+b:["<code>final</code> / <code>private</code> — нельзя переопределить → прямой вызов.","Whole Module Optimization выводит final для internal.","<code>@inline(__always)</code>, <code>@_specialize</code>; <code>dynamic</code> включает ObjC message dispatch."]}
+]},
+{id:"arc",t:"Память и ARC",topics:[
+{t:"strong / weak / unowned",tags:["must","weak"],call:"strong держит; weak не держит и становится nil; unowned не держит и при обращении после освобождения — краш.",
+b:["weak всегда Optional var.","unowned — когда объект гарантированно живёт дольше (например <code>unowned let a</code> в B, созданном A).","Если deinit не вызвался — ищем retain cycle (Memory Graph)."]},
+{t:"Retain cycle в замыканиях",tags:["must","weak"],call:"Объект держит замыкание, замыкание держит self → цикл. Лечится [weak self]; вложенное сохранённое замыкание после guard let self снова захватит self сильно.",
+b:["<code>VC → handler → замыкание → VC</code> — нужен ещё один <code>[weak self]</code> во вложенном.","<code>asyncAfter</code> с сильным self — не цикл, а продление жизни.","Non-escaping замыкания (<code>map</code>) не хранятся — weak не нужен."]},
+{t:"Capture list: 3 3 3 vs 0 1 2",tags:["weak"],call:"Замыкание захватывает переменную, а не значение; [x] копирует значение в момент создания.",
+b:["<code>while</code> с внешней <code>i</code> → <code>3 3 3</code>; <code>for j in</code> — новая j на итерацию → <code>0 1 2</code>.","<code>[obj]</code> копирует ссылку: изменения свойств видны, переприсваивание — нет."]},
+{t:"lazy var с self",tags:["weak"],call:"lazy var хранящая замыкание с self → цикл после первого обращения; lazy var x = { ... }() выполняется один раз и не течёт.",
+b:["<code>lazy var f: () -> Void = { [weak self] in ... }</code>","<code>lazy var label = { UILabel() }()</code> — безопасно."]},
+{t:"Коллекции слабых ссылок",tags:[],call:"NSHashTable.weakObjects(), NSMapTable (weak keys/values) или своя обёртка Weak<T> с ручной чисткой.",
+b:["<code>struct Weak&lt;T: AnyObject&gt; { weak var value: T? }</code>","Обёртку надо периодически чистить от nil (compactMap).","NSHashTable/NSMapTable обнуляют сами, но размер могут обновлять лениво."]}
+]},
+{id:"gcd",t:"GCD и Operation",topics:[
+{t:"Очередь vs поток",tags:["must"],call:"Очередь — абстракция задач; GCD сам раздаёт их по пулу потоков. Serial-очередь ≠ один поток (кроме main).",
+b:["Плюсы GCD: пул потоков, QoS, не надо управлять жизнью потоков.","Main queue всегда на main thread."]},
+{t:"sync / async и дедлоки",tags:["must","weak"],call:"sync на текущую serial-очередь (main.sync с main) — дедлок; на concurrent вложенный sync — нет.",
+b:["<code>async</code> возвращает сразу — код после него обычно печатается раньше.","<code>q.sync(flags: .barrier)</code> изнутри той же concurrent-очереди — дедлок.","<code>group.wait()</code>/<code>semaphore.wait()</code> на main блокирует UI."]},
+{t:"Barrier (reader-writer)",tags:["must"],call:"Concurrent-очередь: чтение через sync, запись через async(flags: .barrier).",
+b:["<pre><code>func get() -> V { q.sync { value } }\nfunc set(_ v: V) { q.async(flags: .barrier) { self.value = v } }</code></pre>"]},
+{t:"Семафоры 0 / 1 / N",tags:["weak"],call:"0 — ждать событие, 1 — лок, N — лимит параллельности. Лок с 0 зависнет навсегда.",
+b:["Ждущие на wait() блокируют потоки GCD; нет priority inheritance.","В async-коде семафор не использовать."]},
+{t:"DispatchGroup подвохи",tags:["must","weak"],call:"Сначала все enter (до async!), leave ровно один раз через defer, потом notify; на пустой группе notify срабатывает сразу.",
+b:["enter внутри async → может выполниться после wait/notify.","Меньше leave — notify никогда; больше — краш.","<code>wait</code> блокирует вызывающего — предпочитать <code>notify</code>."]},
+{t:"OperationQueue и зависимости",tags:[],call:"Плюсы: addDependency (даже между очередями), отмена, maxConcurrentOperationCount, KVO-состояние.",
+b:["Отменённая операция считается завершённой → зависимые стартуют.","BlockOperation с асинхронным вызовом завершается сразу — нужен async-подкласс Operation.","Циклическая зависимость = тихий дедлок."]},
+{t:"Взрыв потоков (thread explosion)",tags:["must"],call:"Заблокированные задачи заставляют GCD создавать новые потоки (лимит порядка 64) → память, переключения контекста, риск дедлока.",
+b:["Причины: sync/wait/семафоры внутри concurrent-очередей, много global async с блокировкой.","Лечение: не блокировать, ограничивать параллелизм, Swift Concurrency (пул = число ядер)."]},
+{t:"Когда чистый Thread",tags:[],call:"Редко: нужен свой RunLoop, долгая блокирующая работа, свой размер стека или долгоживущий выделенный поток.",
+b:["Иначе — GCD/Operation/async-await."]}
+]},
+{id:"conc",t:"Swift Concurrency",topics:[
+{t:"Task, структурная vs неструктурная",tags:["must","weak"],call:"Отмена родителя доходит до async let и TaskGroup, но не до Task {} и Task.detached — их отменяют вручную.",
+b:["<code>Task {}</code> наследует актор и приоритет, detached — нет.","<code>.task</code> в SwiftUI отменяется сам при исчезновении view."]},
+{t:"Отмена кооперативная",tags:["must"],call:"cancel() только ставит флаг; цикл без try Task.checkCancellation() доработает до конца.",
+b:["Проверять <code>Task.isCancelled</code> раз в N итераций."]},
+{t:"Task.sleep / Thread.sleep / yield",tags:["weak"],call:"Task.sleep приостанавливает и отменяем; Thread.sleep блокирует поток пула; Task.yield уступает и сразу продолжает.",b:[]},
+{t:"Акторы и reentrancy",tags:["must","weak"],call:"На каждом await актор может выполнять другие вызовы — логическая гонка, не data race. Фикс: inFlight: [URL: Task<...>], не NSLock.",
+b:["Без await внутри — атомарно.","Между чтением и записью есть await — закончить изменение до await или перечитать состояние.","NSLock нельзя держать через await."]},
+{t:"Continuation",tags:[],call:"withCheckedThrowingContinuation оборачивает колбэк в async; resume ровно один раз.",b:[]},
+{t:"Sendable и Mutex",tags:[],call:"«Mutation of captured var in concurrently-executing code» лечится Mutex (iOS 18) / OSAllocatedUnfairLock, классом-боксом @unchecked Sendable или nonisolated(unsafe) (избегать).",
+b:["<pre><code>import Synchronization\nlet result = Mutex<[Int]>([])\nresult.withLock { $0.append(x) }</code></pre>"]}
+]},
+{id:"uikit",t:"UIKit",topics:[
+{t:"Жизненный цикл VC",tags:["must"],call:"init → loadView → viewDidLoad (разово, без размеров) → viewWillAppear → viewIsAppearing → layout (размеры финальные) → viewDidAppear → willDisappear → didDisappear → deinit.",
+b:["Push A→B: B load/didLoad, A willDisappear, B willAppear, …, A didDisappear, B didAppear.","Прерванный свайп-назад: willAppear без didAppear.","pageSheet (iOS 13+): презентующий не получает disappear.","viewDidLoad повторится, только если view выгрузили вручную (<code>vc.view = nil</code>)."]},
+{t:"viewDidLoad vs viewWillAppear — ошибки",tags:["must"],call:"В viewDidLoad — разовая настройка; то, что должно обновляться на каждом показе (данные, nav bar, геометрия, аналитика показа), — в willAppear/didAppear.",
+b:["Размеры в viewDidLoad не финальные → viewDidLayoutSubviews/viewIsAppearing.","Подписки симметрично: willAppear/willDisappear (или did-пары).","Обратная ошибка: тяжёлая разовая настройка в willAppear — повторяется на каждом показе."]},
+{t:"Стек навигации",tags:[],call:"VC в стеке UINavigationController живут (сильные ссылки), deinit — только после pop; view сами не выгружаются (с iOS 6), viewDidLoad при возврате не вызывается.",b:[]},
+{t:"Hit-testing и responder chain",tags:["must"],call:"hitTest идёт сверху вниз по subviews в обратном порядке, пропуская hidden, alpha < 0.01, userInteraction off и точки вне point(inside:); событие поднимается вверх по next-responder.",
+b:["Расширить зону тапа — переопределить <code>point(inside:with:)</code>.","Цепочка: view → superview → VC → … → window → UIApplication → AppDelegate.","Если никто не обработал — событие просто отбрасывается."]},
+{t:"Клавиатура",tags:[],call:"view.endEditing(true) или sendAction(#selector(resignFirstResponder), to: nil, …) — nil target уходит first responder’у.",
+b:["<pre><code>UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)</code></pre>"]},
+{t:"Intrinsic content size, hugging/compression",tags:["weak"],call:"Натуральный размер view по контенту (UILabel, UIButton); hugging — сопротивление растяжению, compression resistance — сжатию.",
+b:["Self-sizing ячейки: непрерывная цепочка констрейнтов + <code>automaticDimension</code>.","Свой view: переопределить <code>intrinsicContentSize</code> + <code>invalidateIntrinsicContentSize()</code>."]},
+{t:"Фреймы vs Auto Layout",tags:[],call:"Фреймы — ручной расчёт, быстро, но всё руками; Auto Layout — декларативные констрейнты, адаптивность, дороже на сложных иерархиях.",
+b:["setNeedsLayout — пометить; layoutIfNeeded — выполнить сразу (в анимациях)."]}
+]},
+{id:"render",t:"Рендеринг и производительность",topics:[
+{t:"Core Animation",tags:["must"],call:"Каждый UIView держит CALayer; CA композитит дерево слоёв на GPU в render server; model/presentation layer; анимации идут вне main.",
+b:["Implicit-анимации у самостоятельных слоёв, у layer view они отключены.","Транзакции (CATransaction) коммитятся в конце runloop."]},
+{t:"Offscreen rendering и blending",tags:["must"],call:"cornerRadius + masksToBounds, mask, тень без shadowPath → offscreen; прозрачность → blending.",
+b:["Тени: задавать <code>shadowPath</code>.","Непрозрачные view (<code>isOpaque</code>, фон) уменьшают blending.","<code>shouldRasterize</code> — только для статичного контента."]},
+{t:"Оптимизация таблиц",tags:["must"],call:"Переиспользование ячеек, лёгкий cellForRow, фиксированные/кэшированные высоты, фоновое декодирование и downsampling картинок, prefetching.",
+b:["prepareForReuse — сброс и отмена загрузки, не настройка.","Плоская иерархия, без лишних констрейнтов.","Не трогать сеть/диск на main."]},
+{t:"Instruments",tags:[],call:"Time Profiler, Allocations/Leaks, Core Animation / Hitches, Memory Graph Debugger.",b:[]}
+]},
+{id:"swiftui",t:"SwiftUI",topics:[
+{t:"List vs LazyVStack",tags:["must"],call:"List — переиспользует ячейки (на основе коллекций UIKit), LazyVStack лениво создаёт, но не переиспользует. Главное — стабильные id и лёгкий body.",
+b:["Избегать <code>id: \\.self</code> для изменяемых данных и <code>AnyView</code>.","Выносить подвью, чтобы сужать инвалидацию."]},
+{t:"Обёртки состояния",tags:[],call:"@State владеет, @Binding меняет чужое, @Environment/@EnvironmentObject — из окружения (нет объекта — краш).",
+b:["@Observable (iOS 17) — отслеживание по конкретным свойствам, меньше лишних перерисовок.","@ViewBuilder → _ConditionalContent для if/else."]},
+{t:"@FocusState",tags:[],call:"Управление фокусом/клавиатурой: @FocusState var focused: Bool + .focused($focused); focused = false скрывает клавиатуру.",b:[]}
+]},
+{id:"storage",t:"Хранение и сеть",topics:[
+{t:"Keychain",tags:["must"],call:"Зашифрованное хранилище для секретов (токены, пароли); SecItem API, атрибуты доступности (WhenUnlocked…), access groups для шаринга.",
+b:["Данные могут пережить удаление приложения.","SecItem-вызовы потокобезопасны, но синхронные — не дёргать на main в горячем пути."]},
+{t:"UserDefaults",tags:["must"],call:"plist для маленьких настроек; потокобезопасен; не для секретов и больших данных (грузится в память).",b:[]},
+{t:"Кэширование",tags:["must"],call:"NSCache (память, потокобезопасен, чистится при нехватке памяти), URLCache (HTTP), файлы в Caches; плюс инвалидация (TTL, ETag, версии).",
+b:["Caches — система может удалить.","Application Support — то, что терять нельзя.","tmp — временные файлы."]},
+{t:"Нормализация vs денормализация",tags:[],call:"Нормализация — без дублей, связи по id; денормализация — дублируем ради скорости чтения ценой синхронизации.",b:[]}
+]},
+{id:"cs",t:"CS и коллекции",topics:[
+{t:"Таблица сложностей",tags:["must"],call:"Array: доступ O(1), append амортизированно O(1), insert/remove в середину O(n), поиск O(n). Dictionary/Set: в среднем O(1).",
+b:["Отсортированный массив: бинпоиск O(log n), вставка O(n).","Связный список: вставка O(1) при известном узле, поиск O(n).","Heap: insert/pop O(log n), peek O(1). Сбалансированное дерево: O(log n).","Deque (swift-collections): O(1) с обоих концов. <code>String.count</code> — O(n)."]},
+{t:"Вставка в массив",tags:["weak"],call:"Insert по индексу i сдвигает n−i элементов вправо — O(n); реаллокация только когда кончился capacity (буфер растёт геометрически).",b:[]},
+{t:"Сортировка",tags:["must"],call:"Swift sort — стабильная модификация Timsort, O(n log n).",b:[]},
+{t:"BFS/DFS: UIView на глубине",tags:["must"],call:"DFS-рекурсия с уменьшением depth и guard depth >= 0; или BFS по уровням: level = level.flatMap { $0.subviews } depth раз.",
+b:["<pre><code>func views(_ v: UIView, depth: Int) -> [UIView] {\n  guard depth >= 0 else { return [] }\n  if depth == 0 { return [v] }\n  return v.subviews.flatMap { views($0, depth: depth - 1) }\n}</code></pre>","Время O(узлов до глубины), память O(depth) стек + результат.","Очередь — через индекс head, не <code>removeFirst</code> (O(n))."]}
+]},
+{id:"objc",t:"Objective-C",topics:[
+{t:"Основы и messaging",tags:[],call:"Вызов метода — отправка сообщения через objc_msgSend; сообщение nil возвращает 0/nil без краша.",b:[]},
+{t:"Атрибуты свойств",tags:["must"],call:"strong/weak/copy/assign, atomic (по умолчанию) / nonatomic, readonly/readwrite.",
+b:["copy — для NSString/блоков (mutable-подклассы).","atomic гарантирует целостность геттера/сеттера, но не потокобезопасность логики."]},
+{t:"Блоки",tags:[],call:"Блок захватывает значения; __block — для изменения переменной; __weak typeof(self) weakSelf против циклов.",b:[]},
+{t:"Runtime",tags:[],call:"Категории, method swizzling, associated objects, динамическое разрешение методов, KVO через isa-swizzling.",b:[]}
+]},
+{id:"tasks",t:"Задачи и ревью",topics:[
+{t:"Ревью ImageFetcher",tags:["must"],call:"Сначала опасное (краш, гонка, не та картинка), потом архитектура (DI, отмена, дедуп), потом производительность.",
+b:["Гонка на словаре-кэше → NSCache/actor/serial queue.","Force unwrap data! → guard, статус, Result.","Переиспользование ячейки → prepareForReuse, сравнение URL/токена.","Отмена (вернуть токен), дедупликация in-flight, downsampling ImageIO.","Переход на main — делает вызывающий, не загрузчик."]},
+{t:"Загрузчик с LoadToken",tags:[],call:"load возвращает optional LoadToken (UUID), nil при попадании в кэш; колбэк всегда async на фоновой очереди; проверка currentURL в ячейке.",b:[]},
+{t:"Многопоточный DFS",tags:["weak"],call:"enter до async, UIKit только на main, порядок результата недетерминирован, notify вместо wait, для маленького дерева параллелизм избыточен.",
+b:["NSLock: unlock через defer, leave — вне лока.","Предупреждение Swift 6 → Mutex / @unchecked Sendable box."]},
+{t:"Вопросы компании",tags:[],call:"Как устроена команда и код-ревью; релизный цикл; онбординг и ожидания на первые 3 месяца.",b:[]}
+]},
+{id:"check",t:"Чек-лист перед собесом",check:true,topics:[]}
+];
+const app=document.getElementById('app'),bar=document.getElementById('bar');
+let hotOnly=localStorage.getItem('hot')==='1',query='';
+const tagH=t=>(t.tags.includes('must')?'<span class="tag must">🔥 MUST</span>':'')+(t.tags.includes('weak')?'<span class="tag weak">⚠️ слабое</span>':'');
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const vis=t=>!hotOnly||t.tags.includes('must');
+function topicHTML(t,open,lbl){return `<details class="topic"${open?' open':''}><summary><div class="tt">${t.t} ${tagH(t)}</div>${lbl?`<div class="sec-lbl">${lbl}</div>`:''}<div class="call"><b>Для созвона:</b> ${esc(t.call)}</div></summary>${t.b.length?`<div class="det"><ul>${t.b.map(x=>x.startsWith('<pre>')?x:`<li>${x}</li>`).join('')}</ul></div>`:''}</details>`}
+function hotBtn(){return `<button class="btn${hotOnly?' on':''}" onclick="toggleHot()">🔥</button>`}
+function toggleHot(){hotOnly=!hotOnly;localStorage.setItem('hot',hotOnly?'1':'0');render()}
+function home(){
+bar.innerHTML=`<span class="ttl">iOS · VK собес</span>${hotOnly?'<span class="small">только 🔥</span>':''}${hotBtn()}`;
+let h=`<h1>Повтор перед собесом</h1><div class="sub">Тапни раздел. 🔥 — показать только MUST.</div><input id="q" type="search" placeholder="Поиск по всем темам…" value="${esc(query)}" autocomplete="off">`;
+h+='<div id="res"></div>';
+app.innerHTML=h;const q=document.getElementById('q');q.oninput=()=>{query=q.value;results()};results();
+}
+function results(){
+const r=document.getElementById('res'),ql=query.trim().toLowerCase();
+if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>{const n=s.check?S.reduce((a,x)=>a+x.topics.filter(vis).length,0):s.topics.filter(vis).length;return `<a class="tile" href="#${s.id}"><div class="n">${i+1}</div><div class="h">${s.t}</div><div class="c">${s.check?'все «Для созвона»':n+' тем'}</div></a>`}).join('')+'</div>';return}
+let out='';S.forEach(s=>s.topics.forEach(t=>{if(!vis(t))return;const hay=(t.t+' '+t.call+' '+t.b.join(' ')+' '+s.t).toLowerCase();if(hay.includes(ql))out+=topicHTML(t,false,s.t)}));
+r.innerHTML=out||'<div class="empty">Ничего не найдено</div>';
+}
+function section(i){
+const s=S[i],p=S[(i-1+S.length)%S.length],n=S[(i+1)%S.length];
+bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}">‹</a><span class="ttl">${i+1}. ${s.t}</span><a class="btn" href="#${n.id}">›</a>${hotBtn()}`;
+let h=`<h1>${s.t}</h1>`;
+if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><ol class="chk">';S.forEach(x=>x.topics.filter(vis).forEach(t=>{h+=`<li><b>${t.t}</b> ${tagH(t)}<div class="s">${x.t}</div>${esc(t.call)}</li>`}));h+='</ol>'}
+else{const ts=s.topics.filter(vis);h+=ts.length?ts.map(t=>topicHTML(t,false)).join(''):'<div class="empty">Нет 🔥 тем в разделе</div>'}
+h+=`<div class="nav2"><a class="btn" href="#${p.id}">‹ ${p.t}</a><a class="btn" href="#${n.id}">${n.t} ›</a></div>`;
+app.innerHTML=h;
+}
+function render(){const id=location.hash.slice(1),i=S.findIndex(s=>s.id===id);if(i<0)home();else section(i)}
+window.addEventListener('hashchange',()=>{render();scrollTo(0,0)});render();
+</script>
+</body>
+</html>
