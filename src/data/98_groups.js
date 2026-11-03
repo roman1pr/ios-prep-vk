@@ -1,8 +1,11 @@
 const G={
 swift:[["types","Типы и память","value vs reference, COW, struct vs class",["Value vs","Struct vs"]],
+ ["optional","Optional","enum none/some, if/guard let, ??, chaining, IUO, T??, память, ObjC nullability",["Optional: устройство","Optional: вложенность"]],
  ["dispatch","Диспетчеризация","static / vtable / witness table / message; как получить static",["Четыре вида","Как получить static"]],
- ["protocols","Протоколы и extension","задача P/C/S, default-реализации, where, композиция",["Протоколы и дисп","Protocol extension"]],
- ["generics","Generics и some/any","ограничения, associatedtype, type erasure, opaque vs existential",["Generics","some vs any"]]],
+ ["protocols","Протоколы и extension","что умеет extension, задача P/C/S, default-реализации, where, композиция",["Extension: что это","Протоколы и дисп","Protocol extension"]],
+ ["generics","Generics и some/any","ограничения, associatedtype, type erasure, opaque vs existential",["Generics","some vs any"]],
+ ["errors","Ошибки и enum","throws, rethrows, Result, typed throws, associated values, indirect",["Ошибки:","Enum с associated"]],
+ ["lang","Язык: доступ, замыкания, обёртки","access control, @escaping/@autoclosure, property wrappers, KeyPath, Codable",["Access control","Замыкания: @escaping","Property wrappers","Codable"]]],
 arc:[["refs","Ссылки и счётчики","strong / weak / unowned, коллекции слабых ссылок",["ARC:","Коллекции слабых"]],
  ["closures","Замыкания и циклы","retain cycle, capture list 3 3 3 vs 0 1 2, lazy var",["Retain cycle","Capture list","lazy var"]]],
 gcd:[["queues","Очереди и deadlock","serial/concurrent, sync/async, deadlock, thread explosion",["Очередь","sync, async","Thread explosion"]],
