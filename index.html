@@ -1122,6 +1122,398 @@ store.users[1]?.name = "Роман"      // одна правка → видно
 print(store.author(of: store.posts[11]!)!.name)   // Роман`}]}
 ]});
 
+put({id:"cs",t:"CS и коллекции",topics:[
+{t:"Таблица сложностей",call:"Array: доступ по индексу O(1), append амортизированно O(1), insert/remove в начало/середину O(n), поиск O(n). Dictionary/Set: вставка, поиск, удаление — в среднем O(1), в худшем O(n) при коллизиях. Сортировка O(n log n).",
+d:["«Амортизированно O(1)»: при нехватке capacity буфер растёт в ~2 раза и копируется (O(n)), но редко → в среднем O(1) на операцию.","Хэш-таблица деградирует при плохом `hash(into:)` (все в одну корзину). Хэш и `==` должны быть согласованы.","`String.count` — O(n): символы (Character) разной длины в байтах; индекс — `String.Index`, не Int.","`removeFirst()` у Array — O(n); `popLast()`/`removeLast()` — O(1).","`contains` у Array O(n), у Set O(1) → для частых проверок перевести в Set."],
+ex:[{n:"Шпаргалка",c:R`
+Структура        доступ    поиск     вставка          удаление
+Array            O(1)      O(n)      O(1)* конец      O(1) конец
+                                     O(n) середина    O(n) середина
+Dictionary/Set   —         O(1)~     O(1)~            O(1)~
+Sorted array     O(1)      O(log n)  O(n)             O(n)
+Linked list      O(n)      O(n)      O(1) у узла      O(1) у узла
+Heap             O(1) top  O(n)      O(log n)         O(log n) top
+Balanced BST     —         O(log n)  O(log n)         O(log n)
+Deque            O(1)      O(n)      O(1) концы       O(1) концы
+* амортизированно, ~ в среднем`}]},
+{t:"Вставка в массив: что происходит",call:"`insert(x, at: i)` сдвигает все элементы с i до конца на одну позицию вправо — n−i перемещений, O(n). Если capacity закончился — сначала выделяется новый буфер (обычно ×2) и всё копируется. Плюс COW: если буфер общий — полная копия.",
+d:["Вставка в начало — худший случай: сдвиг всех n.","`reserveCapacity(n)` заранее — без промежуточных реаллокаций при известном размере.","Много вставок в начало → Deque или собрать в обратном порядке и `reverse()` (O(n) один раз).","Удаление в середине — симметрично, сдвиг влево; `removeAll(where:)` — O(n) за один проход, а не O(n²) циклом с `remove(at:)`."],
+ex:[{n:"Сдвиг по шагам",c:R`
+var a = [10, 20, 30, 40, 50]   // count 5
+a.insert(99, at: 1)
+// 50 → индекс 5, 40 → 4, 30 → 3, 20 → 2  (4 сдвига = n − i)
+// 99 → индекс 1
+print(a)   // [10, 99, 20, 30, 40, 50]`},
+{n:"Capacity",c:R`
+var b: [Int] = []
+var caps: [Int] = []
+for i in 0..<20 {
+    b.append(i)
+    if caps.last != b.capacity { caps.append(b.capacity) }
+}
+print(caps)   // рост примерно ×2 (точные числа зависят от аллокатора — посмотри в Playground)
+
+var c: [Int] = []
+c.reserveCapacity(1000)   // одна аллокация`},
+{n:"O(n²) vs O(n)",c:R`
+var xs = Array(0..<10)
+// ❌ O(n²): каждый remove(at:) сдвигает хвост
+var i = 0
+while i < xs.count { if xs[i] % 2 == 0 { xs.remove(at: i) } else { i += 1 } }
+// ✅ O(n)
+var ys = Array(0..<10)
+ys.removeAll { $0 % 2 == 0 }
+print(xs, ys)   // [1, 3, 5, 7, 9] [1, 3, 5, 7, 9]`}]},
+{t:"Сортировка",call:"`sort()`/`sorted()` в Swift — стабильная модификация Timsort (с Swift 5): O(n log n), O(n) на почти отсортированных данных, дополнительная память O(n). Стабильность — равные элементы сохраняют исходный порядок.",
+d:["Стабильность официально гарантирована документацией (с Swift 5.x), раньше был introsort — нестабильный.","Сортировка по нескольким ключам: кортежи сравниваются лексикографически `(a.age, a.name) < (b.age, b.name)`.","Топ-k из n: не сортировать всё (O(n log n)), а heap размером k — O(n log k).","Бинпоиск — только на отсортированном; `partitioningIndex` есть в swift-algorithms."],
+ex:[{n:"Стабильность и несколько ключей",c:R`
+struct P { let name: String; let age: Int }
+let people = [P(name: "Аня", age: 30), P(name: "Боря", age: 25), P(name: "Вера", age: 30)]
+
+print(people.sorted { $0.age < $1.age }.map(\.name))
+// ["Боря", "Аня", "Вера"]  — Аня осталась перед Верой (стабильно)
+
+print(people.sorted { ($0.age, $0.name) > ($1.age, $1.name) }.map(\.name))
+// ["Вера", "Аня", "Боря"]`},
+{n:"Бинарный поиск",c:R`
+func binarySearch(_ a: [Int], _ x: Int) -> Int? {
+    var lo = 0, hi = a.count - 1
+    while lo <= hi {
+        let mid = lo + (hi - lo) / 2
+        if a[mid] == x { return mid }
+        if a[mid] < x { lo = mid + 1 } else { hi = mid - 1 }
+    }
+    return nil
+}
+print(binarySearch([1, 3, 5, 7, 9], 7) ?? -1)   // 3`}]},
+{t:"Деревья: BFS и DFS (UIView на глубине N)",call:"DFS — рекурсия или стек, идёт вглубь; BFS — очередь, идёт по уровням. Для «все view на глубине N» удобен BFS по уровням или DFS с уменьшением depth. Время O(узлов до глубины N), память — O(высота) для DFS, O(ширина уровня) для BFS.",
+d:["Очередь в Swift — массив + индекс head; `removeFirst()` делает BFS O(n²).","Рекурсия на очень глубоком дереве может переполнить стек — итеративный DFS со стеком.","Порядок результата: DFS — по ветвям, BFS по уровням — слева направо.","Граф (не дерево) — нужен `visited: Set` от циклов."],
+ex:[{n:"DFS рекурсивно",c:R`
+func views(at depth: Int, in root: UIView) -> [UIView] {
+    guard depth >= 0 else { return [] }
+    if depth == 0 { return [root] }
+    return root.subviews.flatMap { views(at: depth - 1, in: $0) }
+}`},
+{n:"BFS по уровням",c:R`
+func viewsBFS(at depth: Int, in root: UIView) -> [UIView] {
+    guard depth >= 0 else { return [] }
+    var level = [root]
+    for _ in 0..<depth {
+        level = level.flatMap(\.subviews)
+        if level.isEmpty { break }
+    }
+    return level
+}`},
+{n:"Очередь с head-индексом и тест на простом дереве",c:R`
+final class Node { let v: Int; var kids: [Node]; init(_ v: Int, _ k: [Node] = []) { self.v = v; kids = k } }
+let root = Node(1, [Node(2, [Node(4), Node(5)]), Node(3, [Node(6)])])
+
+func bfs(_ root: Node) -> [Int] {
+    var queue = [root], head = 0, out: [Int] = []
+    while head < queue.count {
+        let n = queue[head]; head += 1
+        out.append(n.v)
+        queue.append(contentsOf: n.kids)
+    }
+    return out
+}
+func dfs(_ n: Node) -> [Int] { [n.v] + n.kids.flatMap(dfs) }
+
+print(bfs(root))   // [1, 2, 3, 4, 5, 6]
+print(dfs(root))   // [1, 2, 4, 5, 3, 6]`}]},
+{t:"Hashable, Equatable, свои ключи",call:"Ключ Dictionary/элемент Set должен быть `Hashable`: равные объекты обязаны иметь равный хэш. Для struct с Hashable-полями — синтез автоматически; для своей логики равенства — хэшировать те же поля, что сравниваются в `==`.",
+d:["Хэш в Swift рандомизирован на запуск (seed) — не сохранять `hashValue` между запусками.","Мутировать объект-ключ (класс) после вставки в Set — элемент «теряется».","Для классов часто равенство по идентичности: `ObjectIdentifier(self)`."],
+ex:[{n:"",c:R`
+struct User: Hashable {
+    let id: Int
+    var name: String
+    static func == (a: User, b: User) -> Bool { a.id == b.id }
+    func hash(into h: inout Hasher) { h.combine(id) }   // только id, как в ==
+}
+let s: Set = [User(id: 1, name: "A"), User(id: 1, name: "B")]
+print(s.count)   // 1`}]}
+]});
+
+put({id:"objc",t:"Objective-C",topics:[
+{t:"Класс: .h, .m, init",call:"`.h` — публичный `@interface`, `.m` — `@implementation` и приватный class extension `@interface Feed ()`. `-` — метод экземпляра, `+` — метод класса. Все объекты — по указателю (`NSString *`). `init` может вернуть nil, поэтому `self = [super init]; if (self) {...}`.",
+d:["В `init`/`dealloc` обращаться к ivar (`_title`), а не через `self.title` — сеттер может быть переопределён в подклассе.","`instancetype` — «тип текущего класса» (как `Self`).","`@property` синтезирует ivar `_name`, геттер `name` и сеттер `setName:`.","Имя метода (селектор) складывается из частей: `initWithTitle:`, `addItem:atIndex:`."],
+ex:[{n:"",c:R`
+// Feed.h
+@interface Feed : NSObject
+@property (nonatomic, copy) NSString *title;
+- (instancetype)initWithTitle:(NSString *)title;
++ (instancetype)feedWithTitle:(NSString *)title;
+@end
+
+// Feed.m
+@interface Feed ()                       // приватное
+@property (nonatomic, strong) NSMutableArray<NSString *> *items;
+@end
+
+@implementation Feed
+- (instancetype)initWithTitle:(NSString *)title {
+    self = [super init];
+    if (self) {
+        _title = [title copy];
+        _items = [NSMutableArray array];
+    }
+    return self;
+}
++ (instancetype)feedWithTitle:(NSString *)title {
+    return [[self alloc] initWithTitle:title];
+}
+@end
+
+// Swift: Feed(title: "News"), Feed.feedWithTitle → тоже Feed(title:)`}]},
+{t:"Сообщения и nil",call:"`[obj method]` компилируется в `objc_msgSend(obj, @selector(method))` — метод ищется в рантайме. Сообщение `nil` не падает и возвращает 0/nil/NO. Но выход за границы `NSArray` или вставка `nil` в коллекцию — краш.",
+d:["`[nil count]` → 0; `[nil objectAtIndex:0]` → nil.","`@[obj]` или `[array addObject:obj]`, где obj == nil → исключение; `mDict[@\"k\"] = nil` у `NSMutableDictionary` — не краш, удаляет ключ.","`id` — любой объект, компилятор не проверяет методы.","Struct-возврат от nil-сообщения (CGRect) — нули на современных рантаймах, но полагаться не стоит."],
+ex:[{n:"",c:R`
+NSArray *items = nil;
+NSLog(@"%lu", (unsigned long)items.count);   // 0, без краша
+
+NSArray *a = @[@1, @2];
+// [a objectAtIndex:5];                        // 💥 NSRangeException
+
+NSMutableArray *m = [NSMutableArray array];
+// [m addObject:nil];                          // 💥 NSInvalidArgumentException
+
+NSString *s = nil;
+if ([s isEqualToString:@"x"]) {}              // NO — тихо ложь, частая логическая ошибка`}]},
+{t:"Атрибуты свойств",call:"`strong` (держит), `weak` (не держит, обнуляется), `assign` (для примитивов; у объекта — висячий указатель), `copy` (копия при присвоении — для NSString, блоков, коллекций), `atomic` (по умолчанию) / `nonatomic`, `readonly` / `readwrite`.",
+d:["`copy` у NSString: снаружи могут передать `NSMutableString` и изменить его после присвоения.","`atomic` гарантирует целостность одного геттера/сеттера, но не потокобезопасность логики (`if (self.x) self.x = …` — гонка).","Наружу `readonly`, внутри class extension переобъявить `readwrite` ≈ `private(set)`.","Делегат — всегда `weak`; блок-свойство — `copy`."],
+ex:[{n:"Зачем copy",c:R`
+@property (nonatomic, strong) NSString *strongName;
+@property (nonatomic, copy)   NSString *copyName;
+
+NSMutableString *m = [NSMutableString stringWithString:@"Roman"];
+obj.strongName = m;
+obj.copyName = m;
+[m appendString:@"!"];
+NSLog(@"%@ %@", obj.strongName, obj.copyName);   // Roman! Roman`}]},
+{t:"Блоки, __weak и __block",call:"Блок захватывает значения переменных на момент создания (как `[x]`), объекты — сильно. Для изменения переменной внутри блока — `__block`. Против цикла — `__weak typeof(self) weakSelf = self;` и внутри `__strong` копия (weak-strong dance).",
+d:["Блок, сохранённый в свойство, надо копировать (`copy`) — исторически блоки создаются на стеке.","`__strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;` — аналог `guard let self`.","Обращение к ivar `_items` внутри блока неявно захватывает `self` → тоже цикл.","Ошибки — через `NSError **` или параметр `NSError *` в блоке, не исключения."],
+ex:[{n:"Захват значения vs __block",c:R`
+int x = 1;
+__block int y = 1;
+void (^blk)(void) = ^{ NSLog(@"%d %d", x, y); };
+x = 2; y = 2;
+blk();   // 1 2`},
+{n:"weak-strong dance",c:R`
+__weak typeof(self) weakSelf = self;
+[self.api loadWithCompletion:^(NSArray *items, NSError *error) {
+    __strong typeof(weakSelf) self_ = weakSelf;
+    if (!self_) return;
+    [self_ showItems:items];
+}];`}]},
+{t:"Протоколы и делегаты",call:"`@protocol` с `@required` (по умолчанию) и `@optional` методами. Перед вызовом optional-метода — `respondsToSelector:`, иначе краш `unrecognized selector`. Делегат хранится `weak`.",
+d:["`<NSObject>` в объявлении протокола даёт `respondsToSelector:` и прочие базовые методы.","В Swift optional-методы есть только у `@objc protocol` и вызываются `delegate?.method?()`.","Таблица на Obj-C — те же `dataSource`-методы, длинные селекторы `tableView:cellForRowAtIndexPath:`."],
+ex:[{n:"",c:R`
+@protocol FeedViewDelegate <NSObject>
+- (void)feedView:(FeedView *)view didSelectItemAtIndex:(NSInteger)index;
+@optional
+- (void)feedViewDidScroll:(FeedView *)view;
+@end
+
+@property (nonatomic, weak) id<FeedViewDelegate> delegate;
+
+if ([self.delegate respondsToSelector:@selector(feedViewDidScroll:)]) {
+    [self.delegate feedViewDidScroll:self];
+}`}]},
+{t:"Мост со Swift",call:"Obj-C → Swift через bridging header; Swift → Obj-C через сгенерированный `Module-Swift.h`, видны `@objc`-члены (классы — наследники NSObject). Nullability: `nullable` → `T?`, `nonnull` → `T`, без пометки → `T!`.",
+d:["`NS_ASSUME_NONNULL_BEGIN/END` — всё nonnull по умолчанию.","Легковесные дженерики `NSArray<NSString *> *` → `[String]`, без них → `[Any]`.","`NS_SWIFT_NAME(...)` — красивое имя в Swift; `NS_REFINED_FOR_SWIFT` — спрятать и обернуть.","Swift struct, enum с associated values, generics не видны в Obj-C."],
+ex:[{n:"",c:R`
+NS_ASSUME_NONNULL_BEGIN
+@interface UserService : NSObject
+- (nullable User *)userWithID:(NSInteger)userID;
+- (void)loadUsers:(void (^)(NSArray<User *> *users, NSError * _Nullable error))completion;
+@end
+NS_ASSUME_NONNULL_END
+
+// В Swift:
+// func user(withID userID: Int) -> User?
+// func loadUsers(_ completion: @escaping ([User], Error?) -> Void)
+// + автоматически async-версия: func loadUsers() async throws -> [User]`}]},
+{t:"Runtime: forwarding, swizzling, associated objects",call:"Метод не найден → `resolveInstanceMethod:` (добавить реализацию) → `forwardingTargetForSelector:` (переадресовать другому объекту) → `methodSignatureForSelector:` + `forwardInvocation:` → `doesNotRecognizeSelector:` (краш). Swizzling — обмен реализаций через `method_exchangeImplementations`, обычно в `+load` с `dispatch_once`.",
+d:["Категории добавляют методы к существующим классам (≈ extension), но не хранимые свойства — для них associated objects (`objc_setAssociatedObject`).","Категория с тем же именем метода тихо перекрывает оригинал — коллизии.","KVO работает через isa-swizzling: создаётся подкласс `NSKVONotifying_X` с переопределёнными сеттерами. В Swift нужен `@objc dynamic`.","Swizzling глобален и хрупок; применяют для аналитики, отладки."],
+ex:[{n:"Swizzling viewWillAppear",c:R`
+@implementation UIViewController (Tracking)
++ (void)load {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Method orig = class_getInstanceMethod(self, @selector(viewWillAppear:));
+        Method mine = class_getInstanceMethod(self, @selector(trk_viewWillAppear:));
+        method_exchangeImplementations(orig, mine);
+    });
+}
+- (void)trk_viewWillAppear:(BOOL)animated {
+    [self trk_viewWillAppear:animated];   // после обмена это вызов оригинала
+    NSLog(@"show %@", NSStringFromClass([self class]));
+}
+@end`},
+{n:"Forwarding",c:R`
+- (id)forwardingTargetForSelector:(SEL)sel {
+    if ([self.backup respondsToSelector:sel]) return self.backup;
+    return [super forwardingTargetForSelector:sel];
+}`}]}
+]});
+
+put({id:"tasks",t:"Задачи и ревью",topics:[
+{t:"Как вести ревью вслух",call:"Порядок: 1) краши и гонки, 2) неверное поведение (не та картинка, UI не с main), 3) архитектура (DI, отмена, дедупликация, тестируемость), 4) производительность и память. Каждую проблему: что не так → к чему приводит → как исправить.",
+d:["Сначала одной фразой сказать, что делает код, — показывает, что ты его понял.","Не тонуть в стиле (имена, отступы) — интервьюеру важны баги и компромиссы.","Предлагать минимальный фикс, затем «как сделал бы в проде».","Если не уверен — сказать, как проверишь (Thread Sanitizer, Main Thread Checker, тест)."],
+ex:[]},
+{t:"Ревью ImageFetcher: проблемы",call:"Гонка на словаре `cache` (запись из фонового потока URLSession), два force unwrap, completion не на main → UIKit с фона, неверная картинка в переиспользованной ячейке, нет отмены, дубли запросов на один URL, нет проверки статуса/ошибки, неограниченный кеш без реакции на memory warning, синглтон без DI, разные потоки completion (кеш — синхронно, сеть — асинхронно).",
+d:["**Гонка**: `cache[url] = image` из потоков URLSession + чтение с main → краш/повреждение. Фикс: NSCache или serial-очередь/lock/actor.","**Force unwrap**: `data!` при ошибке сети, `UIImage(data:)!` на не-картинке/HTML 404 → краш. Фикс: guard, статус-код, `Result`.","**Поток**: completion из фоновой очереди → `avatarView.image = ` не на main (Main Thread Checker). Фикс: переход на main у вызывающего или явно в API.","**Reuse**: ячейку переиспользовали, а старый запрос вернулся → чужой аватар. Фикс: сохранять URL/токен, сравнивать; `prepareForReuse` — отмена и сброс.","**Отмена и дедуп**: прокрутка генерирует сотни запросов; один URL качается N раз. Фикс: токен отмены, in-flight словарь колбэков.","**Память**: словарь растёт бесконечно, декодированные картинки полного размера. Фикс: NSCache с cost, downsampling.","**Синглтон**: прямой `ImageFetcher.shared` в ячейке → нельзя подменить в тестах. Фикс: протокол + инъекция.","**Мелочи**: `self` в замыкании держит ячейку до конца запроса; кеш отвечает синхронно, сеть — асинхронно (непредсказуемый порядок)."],
+ex:[{n:"Исходный код",c:R`
+final class ImageFetcher {
+    static let shared = ImageFetcher()
+    var cache: [URL: UIImage] = [:]
+
+    func fetch(_ url: URL, completion: @escaping (UIImage?) -> Void) {
+        if let image = cache[url] { completion(image); return }
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            let image = UIImage(data: data!)!
+            self.cache[url] = image
+            completion(image)
+        }.resume()
+    }
+}
+final class AvatarCell: UITableViewCell {
+    let avatarView = UIImageView()
+    func configure(with user: User) {
+        ImageFetcher.shared.fetch(user.avatarURL) { image in
+            self.avatarView.image = image
+        }
+    }
+}`}]},
+{t:"ImageFetcher: исправленная версия (колбэки)",call:"NSCache для памяти, serial-очередь для состояния in-flight, токен для отмены, один сетевой запрос на URL, проверка статуса, completion всегда на main. Ячейка хранит токен и текущий URL, отменяет в `prepareForReuse`.",
+d:["Отмена одного подписчика не отменяет загрузку, если на неё ещё кто-то подписан.","Попадание в кеш — тоже асинхронно на main (или явно документировать синхронный ответ).","Swift 6: колбэк `@MainActor @Sendable` — компилятор проверит, что UI трогаем на main, а захваты безопасны.","На async/await то же самое проще: actor + in-flight `Task` (см. Swift Concurrency → Actor и реентрантность)."],
+ex:[{n:"Загрузчик",c:R`
+protocol ImageLoading {
+    @discardableResult
+    func load(_ url: URL, completion: @escaping @MainActor @Sendable (UIImage?) -> Void) -> UUID?
+    func cancel(_ token: UUID)
+}
+
+final class ImageLoader: ImageLoading, @unchecked Sendable {
+    private let cache = NSCache<NSURL, UIImage>()
+    private let session: URLSession
+    private let queue = DispatchQueue(label: "image.loader")       // защищает поля ниже
+    private var waiters: [URL: [UUID: @MainActor @Sendable (UIImage?) -> Void]] = [:]
+    private var tasks: [URL: URLSessionDataTask] = [:]
+
+    init(session: URLSession = .shared) { self.session = session; cache.countLimit = 300 }
+
+    @discardableResult
+    func load(_ url: URL, completion: @escaping @MainActor @Sendable (UIImage?) -> Void) -> UUID? {
+        if let img = cache.object(forKey: url as NSURL) {
+            DispatchQueue.main.async { completion(img) }
+            return nil
+        }
+        let token = UUID()
+        queue.async {
+            self.waiters[url, default: [:]][token] = completion
+            guard self.tasks[url] == nil else { return }               // уже грузится — ждём
+            let task = self.session.dataTask(with: url) { data, resp, _ in
+                let ok = (resp as? HTTPURLResponse)?.statusCode == 200
+                let image = ok ? data.flatMap(UIImage.init(data:)) : nil
+                if let image { self.cache.setObject(image, forKey: url as NSURL) }
+                self.queue.async {
+                    let callbacks = self.waiters.removeValue(forKey: url) ?? [:]
+                    self.tasks[url] = nil
+                    DispatchQueue.main.async { callbacks.values.forEach { $0(image) } }
+                }
+            }
+            self.tasks[url] = task
+            task.resume()
+        }
+        return token
+    }
+
+    func cancel(_ token: UUID) {
+        queue.async {
+            for (url, var w) in self.waiters where w[token] != nil {
+                w[token] = nil
+                if w.isEmpty {                       // больше никто не ждёт
+                    self.waiters[url] = nil
+                    self.tasks.removeValue(forKey: url)?.cancel()
+                } else {
+                    self.waiters[url] = w
+                }
+            }
+        }
+    }
+}`},
+{n:"Ячейка",c:R`
+final class AvatarCell: UITableViewCell {
+    let avatarView = UIImageView()
+    private var token: UUID?
+    private var currentURL: URL?
+    var loader: ImageLoading!                       // инъекция
+
+    func configure(with user: User) {
+        currentURL = user.avatarURL
+        token = loader.load(user.avatarURL) { [weak self] image in
+            guard let self, self.currentURL == user.avatarURL else { return }
+            self.avatarView.image = image ?? UIImage(systemName: "person.circle")
+        }
+    }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        if let token { loader.cancel(token) }
+        token = nil; currentURL = nil
+        avatarView.image = nil
+    }
+}`}]},
+{t:"Многопоточный обход дерева (DFS + DispatchGroup)",call:"Каждый узел обрабатывается в отдельной задаче: `group.enter()` до `async`, `leave()` в `defer`; общий результат — под lock/Mutex; ждать через `notify`, а не `wait` на main. Порядок результата недетерминирован. UIView можно читать только на main — для UIKit-дерева параллелизм не подходит.",
+d:["`enter()` внутри async — `notify` может сработать, пока дети ещё не добавлены.","`leave()` вне критической секции; `unlock` — через `defer`.","Swift 6: захват изменяемого `var` в `@Sendable` — ошибка → `Mutex` (iOS 18) или `@unchecked Sendable` класс с NSLock.","Для маленького дерева параллелизм медленнее последовательного обхода (накладные расходы на задачи); для CPU-работы — `concurrentPerform` или TaskGroup.","Узлы дерева должны быть Sendable (иммутабельные `let`)."],
+ex:[{n:"GCD-версия",c:R`
+final class Node: Sendable {
+    let value: Int
+    let children: [Node]
+    init(_ v: Int, _ c: [Node] = []) { value = v; children = c }
+}
+
+final class Collector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Int] = []
+    func add(_ v: Int) { lock.lock(); defer { lock.unlock() }; values.append(v) }
+    var result: [Int] { lock.lock(); defer { lock.unlock() }; return values }
+}
+
+func parallelDFS(_ root: Node, completion: @escaping @Sendable ([Int]) -> Void) {
+    let group = DispatchGroup()
+    let out = Collector()
+    @Sendable func visit(_ n: Node) {
+        group.enter()                                  // до async
+        DispatchQueue.global().async {
+            defer { group.leave() }
+            out.add(n.value)
+            n.children.forEach(visit)                  // дети тоже enter до своего async
+        }
+    }
+    visit(root)
+    group.notify(queue: .main) { completion(out.result) }
+}
+
+let tree = Node(1, [Node(2, [Node(4)]), Node(3)])
+parallelDFS(tree) { print($0.sorted()) }   // [1, 2, 3, 4]  (без sorted — порядок любой)`},
+{n:"TaskGroup-версия",c:R`
+func sum(_ n: Node) async -> Int {
+    await withTaskGroup(of: Int.self) { group in
+        for child in n.children { group.addTask { await sum(child) } }
+        var total = n.value
+        for await s in group { total += s }
+        return total
+    }
+}
+// await sum(tree)  → 10`}]},
+{t:"Вопросы компании в конце",call:"Спросить про команду и продукт: чем занимается команда и какие задачи будут в первые 3 месяца; как устроены код-ревью, релизы и тестирование; доля UIKit/SwiftUI/Obj-C; как измеряют качество (crash-free, hitches); что для них успех кандидата через полгода.",
+d:["2–3 вопроса достаточно; выбрать те, ответ на которые реально важен для решения.","Хороший сигнал — вопросы о процессах и метриках, а не о плюшках.","Можно спросить фидбек: «что по моим ответам стоит подтянуть?»"],
+ex:[]}
+]});
+
+put({id:"check",t:"Чек-лист перед собесом",check:true,topics:[]});
+
 const app=document.getElementById('app'),bar=document.getElementById('bar');
 let query='';
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
