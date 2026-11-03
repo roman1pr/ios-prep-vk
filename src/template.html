@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>iOS собес VK — повтор</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--card2:#1f232c;--txt:#e6e8ee;--mut:#9aa1ad;--acc:#4f9dff;--bd:#2a2f3a;--ok:#5ad08a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,sans-serif;-webkit-text-size-adjust:100%;overflow-x:hidden}
+a{color:var(--acc)}
+code{font:13px/1.4 ui-monospace,Menlo,monospace;background:#262b36;padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
+pre{max-width:100%;white-space:pre;background:#11141a;border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;margin:6px 0 10px;-webkit-overflow-scrolling:touch}
+pre code{background:none;padding:0;font-size:12.5px;overflow-wrap:normal}
+.bar{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--bd);padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));display:flex;gap:6px;align-items:center}
+.btn{background:var(--card2);color:var(--txt);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font-size:15px;min-height:42px;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.bar .ttl{flex:1;min-width:0;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+main{max-width:860px;margin:0 auto;padding:12px 12px 80px;overflow-x:hidden}
+h1{font-size:22px;margin:6px 0 4px}
+.sub{color:var(--mut);font-size:14px;margin-bottom:12px}
+#q{width:100%;font-size:17px;padding:12px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--txt);margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(min-width:620px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tile{display:block;text-decoration:none;color:var(--txt);background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 12px;min-height:96px}
+.tile:active{background:var(--card2)}
+.tile .n{color:var(--mut);font-size:12px}
+.tile .h{font-weight:650;font-size:16px;margin:2px 0 4px}
+.tile .c{color:var(--mut);font-size:12.5px}
+.topic{background:var(--card);border:1px solid var(--bd);border-radius:12px;margin:8px 0;overflow:hidden;min-width:0}
+.topic>summary{list-style:none;padding:12px;cursor:pointer}
+.topic>summary::-webkit-details-marker{display:none}
+.topic .tt{font-weight:650;font-size:16px}
+.call{color:#cfe3ff;font-size:14.5px;margin-top:6px;border-left:3px solid var(--acc);padding-left:8px}
+.call b{color:var(--acc);font-weight:600}
+.more{color:var(--mut);font-size:12px;margin-top:6px}
+.topic[open] .more{display:none}
+.det{padding:0 12px 12px;border-top:1px dashed var(--bd);overflow-wrap:anywhere;min-width:0}
+.det h4{margin:12px 0 4px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.det ul{margin:4px 0;padding-left:18px}
+.det li{margin:5px 0}
+.cap{font-size:13.5px;color:#cfd6e2;margin-top:8px}
+.sec-lbl{color:var(--mut);font-size:12px}
+.nav2{display:flex;gap:8px;margin-top:18px}
+.nav2 a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.chk li{margin:10px 0}
+.chk .s{color:var(--mut);font-size:12px}
+.empty{color:var(--mut);padding:20px;text-align:center}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<main id="app"></main>
+<script>
+const R=String.raw;const S=[];const put=s=>{const i=S.findIndex(x=>x.id===s.id);if(i<0)S.push(s);else S[i]=s};
+/*DATA*/
+const app=document.getElementById('app'),bar=document.getElementById('bar');
+let query='';
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const fmt=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+function topicHTML(t,lbl){const d=t.d||[],ex=t.ex||[];const has=d.length||ex.length;
+return `<details class="topic"><summary><div class="tt">${esc(t.t)}</div>${lbl?`<div class="sec-lbl">${esc(lbl)}</div>`:''}<div class="call"><b>Для созвона:</b> ${fmt(t.call)}</div>${has?'<div class="more">▸ подробнее и примеры</div>':''}</summary>${has?`<div class="det">${d.length?`<h4>Подробнее</h4><ul>${d.map(x=>`<li>${fmt(x)}</li>`).join('')}</ul>`:''}${ex.length?`<h4>Примеры</h4>${ex.map(e=>`${e.n?`<div class="cap">${fmt(e.n)}</div>`:''}<pre><code>${esc(e.c.replace(/^\n/,''))}</code></pre>`).join('')}`:''}</div>`:''}</details>`}
+function home(){
+bar.innerHTML=`<span class="ttl">iOS · VK собес</span>`;
+app.innerHTML=`<h1>Повтор перед собесом</h1><div class="sub">Тапни раздел или ищи по всем темам и коду.</div><input id="q" type="search" placeholder="Поиск по всем темам…" value="${esc(query)}" autocomplete="off"><div id="res"></div>`;
+const q=document.getElementById('q');q.oninput=()=>{query=q.value;results()};results();}
+function results(){
+const r=document.getElementById('res'),ql=query.trim().toLowerCase();
+if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона»':s.topics.length+' тем'}</div></a>`).join('')+'</div>';return}
+let out='';S.forEach(s=>s.topics.forEach(t=>{const hay=[t.t,t.call,s.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t)}));
+r.innerHTML=out||'<div class="empty">Ничего не найдено</div>';}
+function section(i){
+const s=S[i],p=S[(i-1+S.length)%S.length],n=S[(i+1)%S.length];
+bar.innerHTML=`<a class="btn" href="#">← Разделы</a><a class="btn" href="#${p.id}" aria-label="назад">‹</a><span class="ttl">${i+1}. ${esc(s.t)}</span><a class="btn" href="#${n.id}" aria-label="вперёд">›</a>`;
+let h=`<h1>${esc(s.t)}</h1>`;
+if(s.check){h+='<div class="sub">Все «Для созвона» на одном экране</div><ol class="chk">';S.forEach(x=>x.topics.forEach(t=>{h+=`<li><b>${esc(t.t)}</b><div class="s">${esc(x.t)}</div>${fmt(t.call)}</li>`}));h+='</ol>'}
+else h+=s.topics.map(t=>topicHTML(t)).join('');
+h+=`<div class="nav2"><a class="btn" href="#${p.id}">‹ ${esc(p.t)}</a><a class="btn" href="#${n.id}">${esc(n.t)} ›</a></div>`;
+app.innerHTML=h;}
+function render(){const id=location.hash.slice(1),i=S.findIndex(s=>s.id===id);if(i<0)home();else section(i)}
+window.addEventListener('hashchange',()=>{render();scrollTo(0,0)});render();
+</script>
+</body>
+</html>
