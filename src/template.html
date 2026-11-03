@@ -58,6 +58,14 @@ h1{font-size:22px;margin:6px 0 4px}
 .crumb span{font-weight:600;font-size:15px}
 .chk h3{font-size:15px;margin:18px 0 0;color:var(--acc)}
 .chk h3 a{text-decoration:none}
+.tw{overflow-x:auto;max-width:100%;margin:6px 0 10px;border:1px solid var(--bd);border-radius:10px;-webkit-overflow-scrolling:touch}
+.tw table{border-collapse:separate;border-spacing:0;font-size:12.5px;line-height:1.35;min-width:100%}
+.tw th,.tw td{padding:6px 8px;border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);text-align:left;vertical-align:top;overflow-wrap:normal;word-break:normal;min-width:110px;max-width:220px}
+.tw thead th{background:var(--card2);color:var(--acc);font-weight:650}
+.tw tbody th{font-weight:600;color:var(--txt)}
+.tw tr>:first-child{position:sticky;left:0;z-index:1;background:var(--card2);min-width:84px;max-width:120px}
+.tw tr:last-child>*{border-bottom:0}.tw tr>:last-child{border-right:0}
+.tw code{font-size:11.5px;white-space:normal}
 </style>
 </head>
 <body>
@@ -70,8 +78,9 @@ const app=document.getElementById('app'),bar=document.getElementById('bar');
 let query='';
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const fmt=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
-function topicHTML(t,lbl){const d=t.d||[],ex=t.ex||[];const has=d.length||ex.length;
-return `<details class="topic"><summary><div class="tt">${esc(t.t)}</div>${lbl?`<div class="sec-lbl">${esc(lbl)}</div>`:''}<div class="call"><b>Для созвона:</b> ${fmt(t.call)}</div>${has?'<div class="more">▸ подробнее и примеры</div>':''}</summary>${has?`<div class="det">${d.length?`<h4>Подробнее</h4><ul>${d.map(x=>`<li>${fmt(x)}</li>`).join('')}</ul>`:''}${ex.length?`<h4>Примеры</h4>${ex.map(e=>`${e.n?`<div class="cap">${fmt(e.n)}</div>`:''}<pre><code>${esc(e.c.replace(/^\n/,''))}</code></pre>`).join('')}`:''}</div>`:''}</details>`}
+function tableHTML(x){return `<div class="tw"><table><thead><tr>${x.h.map(c=>`<th>${fmt(c)}</th>`).join('')}</tr></thead><tbody>${x.r.map(r=>`<tr>${r.map((c,i)=>i?`<td>${fmt(c)}</td>`:`<th>${fmt(c)}</th>`).join('')}</tr>`).join('')}</tbody></table></div>`}
+function topicHTML(t,lbl){const d=t.d||[],ex=t.ex||[],tb=t.tb||[];const has=d.length||ex.length||tb.length;
+return `<details class="topic"><summary><div class="tt">${esc(t.t)}</div>${lbl?`<div class="sec-lbl">${esc(lbl)}</div>`:''}<div class="call"><b>Для созвона:</b> ${fmt(t.call)}</div>${has?'<div class="more">▸ подробнее и примеры</div>':''}</summary>${has?`<div class="det">${tb.length?`<h4>Сравнение</h4>${tb.map(tableHTML).join('')}`:''}${d.length?`<h4>Подробнее</h4><ul>${d.map(x=>`<li>${fmt(x)}</li>`).join('')}</ul>`:''}${ex.length?`<h4>Примеры</h4>${ex.map(e=>`${e.n?`<div class="cap">${fmt(e.n)}</div>`:''}<pre><code>${esc(e.c.replace(/^\n/,''))}</code></pre>`).join('')}`:''}</div>`:''}</details>`}
 function home(){
 bar.innerHTML=`<span class="ttl">iOS · VK собес</span>`;
 app.innerHTML=`<h1>Повтор перед собесом</h1><div class="sub">Тапни раздел или ищи по всем темам и коду.</div><input id="q" type="search" placeholder="Поиск по всем темам…" value="${esc(query)}" autocomplete="off"><div id="res"></div>`;
@@ -79,7 +88,7 @@ const q=document.getElementById('q');q.oninput=()=>{query=q.value;results()};res
 function results(){
 const r=document.getElementById('res'),ql=query.trim().toLowerCase();
 if(!ql){r.innerHTML='<div class="grid">'+S.map((s,i)=>`<a class="tile" href="#${s.id}"><div class="n">${i+1}${s.check?'':' · '+s.topics.length+' тем'}</div><div class="h">${esc(s.t)}</div><div class="c">${s.check?'все «Для созвона» на одном экране':esc(s.subs.map(x=>x.t).join(' · '))}</div></a>`).join('')+'</div>';return}
-let out='';S.forEach(s=>(s.subs||[]).forEach(u=>u.topics.forEach(t=>{const hay=[t.t,t.call,s.t,u.t,...(t.d||[]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t+' › '+u.t)})));
+let out='';S.forEach(s=>(s.subs||[]).forEach(u=>u.topics.forEach(t=>{const hay=[t.t,t.call,s.t,u.t,...(t.d||[]),...(t.tb||[]).flatMap(x=>[...x.h,...x.r.flat()]),...(t.ex||[]).map(e=>(e.n||'')+' '+e.c)].join(' ').toLowerCase();if(hay.includes(ql))out+=topicHTML(t,s.t+' › '+u.t)})));
 r.innerHTML=out||'<div class="empty">Ничего не найдено</div>';}
 const L=[];S.forEach(s=>(s.subs||[]).forEach(u=>L.push({s,u})));
 function section(i){
